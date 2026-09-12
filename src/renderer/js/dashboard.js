@@ -134,7 +134,6 @@ function renderPlatformStates(states) {
   }
   table.style.display = '';
   empty.style.display = 'none';
-  empty.textContent = '';
 
   const tbody = document.getElementById('platform-states-tbody');
   const rows = services
