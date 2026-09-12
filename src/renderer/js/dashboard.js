@@ -64,6 +64,11 @@ function bindTikTokForm() {
     await api.post('/api/tiktok/disconnect');
     toast('TikTok LIVE отключён', 'info');
   });
+
+  socket.on('tiktok:status', (state) => {
+    const el = document.getElementById('tiktok-status-detail');
+    el.textContent = state.message || '';
+  });
 }
 
 function bindAxelChatForm() {
@@ -85,6 +90,69 @@ function bindAxelChatForm() {
     await api.post('/api/axelchat/disconnect');
     toast('AxelChat отключён', 'info');
   });
+
+  socket.on('axelchat:status', (state) => {
+    const el = document.getElementById('axelchat-status-detail');
+    el.textContent = state.message || '';
+    if (state.states) renderPlatformStates(state.states);
+  });
+}
+
+const PLATFORM_LABELS = {
+  tiktok: 'TikTok',
+  youtube: 'YouTube',
+  youtubeshorts: 'YouTube Shorts',
+  twitch: 'Twitch',
+  kick: 'Kick',
+  vkvideolive: 'VK Видео Трансляция',
+  vkvideo: 'VK Видео',
+  trovo: 'Trovo',
+  goodgame: 'GoodGame',
+  telegram: 'Telegram',
+  discord: 'Discord',
+  rutube: 'Rutube',
+  ok: 'Одноклассники',
+  facebook: 'Facebook',
+};
+
+const CONNECTION_STATE_LABELS = {
+  connected: 'Подключено',
+  connecting: 'Подключение…',
+  not_connected: 'Не подключено',
+  error: 'Ошибка',
+};
+
+function renderPlatformStates(states) {
+  const table = document.getElementById('platform-states-table');
+  const empty = document.getElementById('platform-states-empty');
+  const services = (states && states.services) || [];
+
+  if (!services.length) {
+    table.style.display = 'none';
+    empty.style.display = 'block';
+    return;
+  }
+  table.style.display = '';
+  empty.style.display = 'none';
+  empty.textContent = '';
+
+  const tbody = document.getElementById('platform-states-tbody');
+  const rows = services
+    .filter((s) => s.enabled)
+    .map((s) => {
+      const label = PLATFORM_LABELS[s.type_id] || s.type_id;
+      const stateLabel = CONNECTION_STATE_LABELS[s.connection_state] || s.connection_state;
+      const badgeClass = s.connection_state === 'connected' ? 'on' : s.connection_state === 'connecting' ? '' : 'off';
+      return `
+        <tr>
+          <td>${escapeHtml(label)}</td>
+          <td><span class="badge ${badgeClass}">${escapeHtml(stateLabel)}</span></td>
+          <td>${s.viewersCounterEnabled && s.viewers >= 0 ? s.viewers : '—'}</td>
+          <td>${s.followers >= 0 ? s.followers : '—'}</td>
+        </tr>`;
+    });
+  rows.push(`<tr><td><strong>Всего</strong></td><td></td><td><strong>${states.viewers ?? '—'}</strong></td><td></td></tr>`);
+  tbody.innerHTML = rows.join('');
 }
 
 function bindResourceMonitor() {
@@ -133,6 +201,7 @@ export async function initDashboard() {
   bindAxelChatForm();
   bindResourceMonitor();
   bindEventFeed();
+  socket.on('axelchat:states', renderPlatformStates);
   try {
     await loadSettingsIntoForms();
   } catch (err) {

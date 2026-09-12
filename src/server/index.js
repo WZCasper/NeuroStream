@@ -94,6 +94,7 @@ async function createServer({ userDataDir, electronApp = null }) {
     // При подключении сразу отправляем текущее состояние, чтобы UI не ждал следующего события.
     socket.emit('tiktok:status', tiktokConnector.getState());
     socket.emit('axelchat:status', axelChatConnector.getState());
+    if (axelChatConnector.lastStates) socket.emit('axelchat:states', axelChatConnector.lastStates);
     socket.emit('log:recent', logger.recent(200));
     socket.emit('iot:devices', iotService.listDevices());
 
@@ -111,6 +112,7 @@ async function createServer({ userDataDir, electronApp = null }) {
 
   tiktokConnector.on('status', (state) => io.emit('tiktok:status', state));
   axelChatConnector.on('status', (state) => io.emit('axelchat:status', state));
+  axelChatConnector.on('platformStates', (states) => io.emit('axelchat:states', states));
   iotService.on('deviceStatus', (state) => io.emit('iot:status', state));
 
   eventBus.on('event', (event) => io.emit('event:new', event));

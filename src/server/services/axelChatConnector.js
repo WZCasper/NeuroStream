@@ -56,14 +56,24 @@ class AxelChatConnectorService extends EventEmitter {
     this._reconnectTimer = null;
     this._aliveTimer = null;
     this._seenMessageIds = new Set(); // защита от повторной публикации отредактированных сообщений
+    this.lastStates = null; // последние данные STATES_CHANGED (сервисы + суммарное число зрителей)
+    this.lastErrorMessage = null; // человекочитаемая причина последней ошибки/статуса, для отображения в UI
   }
 
   getState() {
-    return { status: this.status, host: this.host, port: this.port };
+    return {
+      status: this.status,
+      host: this.host,
+      port: this.port,
+      message: this.lastErrorMessage,
+      states: this.lastStates,
+    };
   }
 
   _setStatus(status, extra = {}) {
     this.status = status;
+    if (extra.message !== undefined) this.lastErrorMessage = extra.message;
+    if (status === 'connected') this.lastErrorMessage = null;
     this.emit('status', { ...this.getState(), ...extra });
   }
 
@@ -91,7 +101,7 @@ class AxelChatConnectorService extends EventEmitter {
         // сокет уже мог быть закрыт
       }
     }
-    this._setStatus('stopped');
+    this._setStatus('stopped', { message: null });
   }
 
   _connect() {
@@ -134,8 +144,10 @@ class AxelChatConnectorService extends EventEmitter {
     });
 
     socket.on('error', (err) => {
-      // 'error' обычно сопровождается 'close' — здесь только логируем причину.
-      this.logger.warn('axelchat', `AxelChat недоступен: ${err.message}`);
+      // 'error' обычно сопровождается 'close' — здесь фиксируем причину для отображения в UI.
+      const message = friendlyErrorMessage(err);
+      this.logger.warn('axelchat', `AxelChat недоступен: ${message}`);
+      this._setStatus(this.status, { message });
     });
   }
 
@@ -191,6 +203,7 @@ class AxelChatConnectorService extends EventEmitter {
         // просто подтверждает, что соединение живо — watchdog уже сброшен выше
         break;
       case 'STATES_CHANGED':
+        this.lastStates = msg.data;
         this.emit('platformStates', msg.data);
         break;
       case 'NEW_MESSAGES_RECEIVED':
@@ -238,6 +251,21 @@ class AxelChatConnectorService extends EventEmitter {
       });
     }
   }
+}
+
+/**
+ * Переводит типичные сетевые ошибки Node.js в понятную человеку причину —
+ * помогает пользователю самостоятельно понять, что не так, прямо в интерфейсе.
+ */
+function friendlyErrorMessage(err) {
+  if (!err) return 'неизвестная ошибка';
+  if (err.code === 'ECONNREFUSED') {
+    return 'AxelChat не запущен или в его настройках выключен WebSocket-сервер (Settings → Developers)';
+  }
+  if (err.code === 'ETIMEDOUT' || err.code === 'EHOSTUNREACH') {
+    return `нет ответа от ${err.address || 'указанного адреса'} — проверьте хост и порт`;
+  }
+  return err.message || String(err);
 }
 
 module.exports = { AxelChatConnectorService };

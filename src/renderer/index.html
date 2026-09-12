@@ -28,12 +28,12 @@
   <div class="body-grid">
     <!-- ===================== Sidebar ===================== -->
     <div class="sidebar">
-      <div class="nav-item" data-tab="dashboard"><span class="icon">&#9679;</span> Dashboard</div>
-      <div class="nav-item" data-tab="triggers"><span class="icon">&#9889;</span> Trigger Builder</div>
-      <div class="nav-item" data-tab="tts"><span class="icon">&#128266;</span> TTS &amp; Chat</div>
-      <div class="nav-item" data-tab="iot"><span class="icon">&#128268;</span> IoT Devices</div>
-      <div class="nav-item" data-tab="media"><span class="icon">&#127916;</span> Media Library</div>
-      <div class="nav-item" data-tab="logs"><span class="icon">&#128203;</span> Logs &amp; Settings</div>
+      <div class="nav-item" data-tab="dashboard"><span class="icon">&#9679;</span> Главная</div>
+      <div class="nav-item" data-tab="triggers"><span class="icon">&#9889;</span> Триггеры</div>
+      <div class="nav-item" data-tab="tts"><span class="icon">&#128266;</span> Озвучка и чат</div>
+      <div class="nav-item" data-tab="iot"><span class="icon">&#128268;</span> IoT-устройства</div>
+      <div class="nav-item" data-tab="media"><span class="icon">&#127916;</span> Медиатека</div>
+      <div class="nav-item" data-tab="logs"><span class="icon">&#128203;</span> Журнал и настройки</div>
       <div class="sidebar-footer">NeuroStream Studio <span id="app-version"></span></div>
     </div>
 
@@ -43,7 +43,7 @@
       <!-- ===================== Dashboard ===================== -->
       <section class="tab-panel" id="tab-dashboard">
         <div class="page-header">
-          <div><h1>Dashboard</h1><p>Подключения, ресурсы приложения и живая лента событий трансляции</p></div>
+          <div><h1>Главная</h1><p>Подключения, ресурсы приложения и живая лента событий трансляции</p></div>
         </div>
 
         <div class="grid-2">
@@ -60,6 +60,7 @@
                 <button type="submit" class="btn primary">Подключиться</button>
                 <button type="button" id="btn-tiktok-disconnect" class="btn ghost">Отключить</button>
               </div>
+              <p class="hint" id="tiktok-status-detail" style="margin-top:8px"></p>
             </form>
           </div>
 
@@ -70,14 +71,24 @@
                 <div class="field"><label>Хост</label><input type="text" id="axelchat-host" value="127.0.0.1"></div>
                 <div class="field"><label>Порт</label><input type="number" id="axelchat-port" value="8356"></div>
               </div>
-              <span class="hint">AxelChat должен быть запущен локально с включённым WebSocket-сервером (Настройки → Разработчикам).</span>
+              <span class="hint">AxelChat должен быть запущен локально с включённым WebSocket-сервером (Настройки → Разработчикам). Через AxelChat можно одновременно принимать сообщения YouTube, Twitch, Kick, VK Видео и других поддерживаемых им платформ.</span>
               <label class="checkbox-row" style="margin-top:8px"><input type="checkbox" id="axelchat-auto-connect"> Подключаться автоматически при запуске</label>
               <div class="row" style="margin-top:10px">
                 <button type="submit" class="btn primary">Подключиться</button>
                 <button type="button" id="btn-axelchat-disconnect" class="btn ghost">Отключить</button>
               </div>
+              <p class="hint" id="axelchat-status-detail" style="margin-top:8px"></p>
             </form>
           </div>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title">👀 Зрители по платформам (через AxelChat)</h3>
+          <div id="platform-states-empty" class="list-empty">Подключитесь к AxelChat, чтобы увидеть суммарное число зрителей и статус каждой платформы.</div>
+          <table id="platform-states-table" style="display:none">
+            <thead><tr><th>Платформа</th><th>Статус</th><th>Зрители</th><th>Подписчики</th></tr></thead>
+            <tbody id="platform-states-tbody"></tbody>
+          </table>
         </div>
 
         <div class="grid-3">
@@ -106,7 +117,7 @@
       <!-- ===================== Trigger Builder ===================== -->
       <section class="tab-panel" id="tab-triggers">
         <div class="page-header">
-          <div><h1>Trigger Builder</h1><p>Правила «Событие → набор действий»</p></div>
+          <div><h1>Триггеры</h1><p>Правила «Событие → набор действий»</p></div>
           <button class="btn primary" id="btn-new-trigger">+ Новый триггер</button>
         </div>
 
@@ -158,7 +169,7 @@
       <!-- ===================== TTS & Chat ===================== -->
       <section class="tab-panel" id="tab-tts">
         <div class="page-header">
-          <div><h1>TTS &amp; Chat</h1><p>Независимые голосовые пресеты для TikTok-чата и AxelChat</p></div>
+          <div><h1>Озвучка и чат</h1><p>Независимые голосовые пресеты для TikTok-чата и AxelChat</p></div>
         </div>
 
         <div class="grid-2">
@@ -236,7 +247,7 @@
       <!-- ===================== IoT Devices ===================== -->
       <section class="tab-panel" id="tab-iot">
         <div class="page-header">
-          <div><h1>IoT Devices</h1><p>Устройства (например ESP32), управляемые по HTTP, и проверка связи (health ping)</p></div>
+          <div><h1>IoT-устройства</h1><p>Устройства (например ESP32), управляемые по HTTP, и проверка связи (health ping)</p></div>
           <button class="btn primary" id="btn-new-iot-device">+ Новое устройство</button>
         </div>
 
@@ -269,7 +280,7 @@
       <!-- ===================== Media Library ===================== -->
       <section class="tab-panel" id="tab-media">
         <div class="page-header">
-          <div><h1>Media Library</h1><p>Файлы для алертов (.webm, .gif, .mp3, .wav, изображения) и виджеты OBS Browser Source</p></div>
+          <div><h1>Медиатека</h1><p>Файлы для алертов (.webm, .gif, .mp3, .wav, изображения) и виджеты OBS Browser Source</p></div>
         </div>
 
         <div class="card">
@@ -316,7 +327,7 @@
       <!-- ===================== Logs & Settings ===================== -->
       <section class="tab-panel" id="tab-logs">
         <div class="page-header">
-          <div><h1>Logs &amp; Settings</h1><p>Оформление приложения и журнал событий</p></div>
+          <div><h1>Журнал и настройки</h1><p>Оформление приложения и журнал событий</p></div>
         </div>
 
         <div class="card">

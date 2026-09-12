@@ -53,11 +53,13 @@ class TikTokConnectorService extends EventEmitter {
     this._stopped = true;
     this._reconnectAttempt = 0;
     this._reconnectTimer = null;
+    this.lastErrorMessage = null; // человекочитаемая причина последнего статуса — показывается в UI
   }
 
   getState() {
     return {
       status: this.status,
+      message: this.lastErrorMessage,
       uniqueId: this.uniqueId,
       roomId: this.roomId,
       viewerCount: this.viewerCount,
@@ -66,6 +68,8 @@ class TikTokConnectorService extends EventEmitter {
 
   _setStatus(status, extra = {}) {
     this.status = status;
+    if (extra.message !== undefined) this.lastErrorMessage = extra.message;
+    if (status === 'connected') this.lastErrorMessage = null;
     this.emit('status', { ...this.getState(), ...extra });
   }
 
@@ -96,7 +100,7 @@ class TikTokConnectorService extends EventEmitter {
         // соединение уже могло быть закрыто — это не ошибка
       }
     }
-    this._setStatus('stopped');
+    this._setStatus('stopped', { message: null });
   }
 
   async _connectOnce() {
