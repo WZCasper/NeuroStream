@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="ru" data-theme="electric-blue">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' http://127.0.0.1:* ws://127.0.0.1:*; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:*;">
+<title>NeuroStream Studio</title>
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/themes.css">
+</head>
+<body>
+<div id="app-shell">
+
+  <!-- ===================== Titlebar ===================== -->
+  <div class="titlebar">
+    <div class="brand"><span class="dot"></span> NeuroStream Studio</div>
+    <div class="status-pills">
+      <div class="status-pill" id="pill-tiktok"><span class="indicator"></span><span class="label">TikTok: —</span></div>
+      <div class="status-pill" id="pill-axelchat"><span class="indicator"></span><span class="label">AxelChat: —</span></div>
+    </div>
+    <div class="titlebar-spacer"></div>
+    <div class="window-controls">
+      <button id="btn-minimize" title="Свернуть">&#x2013;</button>
+      <button id="btn-maximize" title="Развернуть">&#x25A1;</button>
+      <button id="btn-close" class="close" title="Закрыть">&#x2715;</button>
+    </div>
+  </div>
+
+  <div class="body-grid">
+    <!-- ===================== Sidebar ===================== -->
+    <div class="sidebar">
+      <div class="nav-item" data-tab="dashboard"><span class="icon">&#9679;</span> Dashboard</div>
+      <div class="nav-item" data-tab="triggers"><span class="icon">&#9889;</span> Trigger Builder</div>
+      <div class="nav-item" data-tab="tts"><span class="icon">&#128266;</span> TTS &amp; Chat</div>
+      <div class="nav-item" data-tab="iot"><span class="icon">&#128268;</span> IoT Devices</div>
+      <div class="nav-item" data-tab="media"><span class="icon">&#127916;</span> Media Library</div>
+      <div class="nav-item" data-tab="logs"><span class="icon">&#128203;</span> Logs &amp; Settings</div>
+      <div class="sidebar-footer">NeuroStream Studio <span id="app-version"></span></div>
+    </div>
+
+    <!-- ===================== Content ===================== -->
+    <div class="content">
+
+      <!-- ===================== Dashboard ===================== -->
+      <section class="tab-panel" id="tab-dashboard">
+        <div class="page-header">
+          <div><h1>Dashboard</h1><p>Подключения, ресурсы приложения и живая лента событий трансляции</p></div>
+        </div>
+
+        <div class="grid-2">
+          <div class="card">
+            <h3 class="card-title">🔴 TikTok LIVE</h3>
+            <form id="form-tiktok-connect">
+              <div class="field"><label>@uniqueId стримера</label>
+                <input type="text" id="tiktok-unique-id" placeholder="например, streamername" required></div>
+              <div class="field"><label>Ключ Euler Stream signApiKey (необязательно)</label>
+                <input type="password" id="tiktok-sign-key" placeholder="повышает лимит запросов подписи">
+                <span class="hint">Без ключа действует бесплатный общий лимит сервиса подписи TikTok. Ключ можно получить на eulerstream.com.</span></div>
+              <label class="checkbox-row"><input type="checkbox" id="tiktok-auto-connect"> Подключаться автоматически при запуске</label>
+              <div class="row" style="margin-top:10px">
+                <button type="submit" class="btn primary">Подключиться</button>
+                <button type="button" id="btn-tiktok-disconnect" class="btn ghost">Отключить</button>
+              </div>
+            </form>
+          </div>
+
+          <div class="card">
+            <h3 class="card-title">💬 AxelChat (агрегатор чатов)</h3>
+            <form id="form-axelchat-connect">
+              <div class="grid-2">
+                <div class="field"><label>Хост</label><input type="text" id="axelchat-host" value="127.0.0.1"></div>
+                <div class="field"><label>Порт</label><input type="number" id="axelchat-port" value="8356"></div>
+              </div>
+              <span class="hint">AxelChat должен быть запущен локально с включённым WebSocket-сервером (Настройки → Разработчикам).</span>
+              <label class="checkbox-row" style="margin-top:8px"><input type="checkbox" id="axelchat-auto-connect"> Подключаться автоматически при запуске</label>
+              <div class="row" style="margin-top:10px">
+                <button type="submit" class="btn primary">Подключиться</button>
+                <button type="button" id="btn-axelchat-disconnect" class="btn ghost">Отключить</button>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <div class="grid-3">
+          <div class="card stat-tile">
+            <span class="label">Загрузка CPU (приложение)</span>
+            <span class="value" id="stat-cpu-value">0%</span>
+            <div class="meter"><span id="stat-cpu-meter" style="width:0%"></span></div>
+          </div>
+          <div class="card stat-tile">
+            <span class="label">Память (RSS)</span>
+            <span class="value" id="stat-ram-value">0 МБ</span>
+            <div class="meter"><span id="stat-ram-meter" style="width:0%"></span></div>
+          </div>
+          <div class="card stat-tile">
+            <span class="label">Система</span>
+            <span class="value" id="stat-sys-value" style="font-size:14px">—</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title">📡 Живая лента событий</h3>
+          <div class="event-feed" id="event-feed"></div>
+        </div>
+      </section>
+
+      <!-- ===================== Trigger Builder ===================== -->
+      <section class="tab-panel" id="tab-triggers">
+        <div class="page-header">
+          <div><h1>Trigger Builder</h1><p>Правила «Событие → набор действий»</p></div>
+          <button class="btn primary" id="btn-new-trigger">+ Новый триггер</button>
+        </div>
+
+        <form class="card" id="trigger-form" style="display:none">
+          <h3 class="card-title" id="trigger-form-title">Новый триггер</h3>
+          <div class="grid-2">
+            <div class="field"><label>Название</label><input type="text" id="trigger-name" required></div>
+            <div class="field"><label>Источник</label>
+              <select id="trigger-source">
+                <option value="tiktok">TikTok</option>
+                <option value="axelchat">AxelChat</option>
+                <option value="any">Любой</option>
+              </select></div>
+          </div>
+          <div class="grid-2">
+            <div class="field"><label>Тип события</label>
+              <select id="trigger-event-type">
+                <option value="gift">Донат (подарок)</option>
+                <option value="chat_keyword">Ключевое слово в чате</option>
+                <option value="follow">Подписка (follow)</option>
+                <option value="share">Поделились трансляцией</option>
+                <option value="subscribe">Оформлена подписка (sub)</option>
+                <option value="like">Лайки</option>
+              </select></div>
+            <div class="field"><label>Задержка между срабатываниями (мс)</label>
+              <input type="number" id="trigger-cooldown" min="0" value="0"></div>
+          </div>
+          <div id="trigger-conditions"></div>
+
+          <h4 class="card-title">Цепочка действий</h4>
+          <div class="action-chain" id="trigger-action-chain"></div>
+          <button type="button" class="btn small" id="btn-add-action" style="margin-top:8px">+ Добавить действие</button>
+
+          <div class="row" style="margin-top:16px">
+            <button type="submit" class="btn primary">Сохранить триггер</button>
+            <button type="button" class="btn ghost" id="btn-cancel-trigger-form">Отмена</button>
+          </div>
+        </form>
+
+        <div class="card">
+          <table>
+            <thead><tr><th></th><th>Название</th><th>Источник</th><th>Событие</th><th>Условия</th><th>Действия</th><th></th></tr></thead>
+            <tbody id="triggers-tbody"></tbody>
+          </table>
+          <div class="list-empty" id="triggers-empty">Триггеров пока нет — создайте первый, чтобы связать события трансляции с действиями.</div>
+        </div>
+      </section>
+
+      <!-- ===================== TTS & Chat ===================== -->
+      <section class="tab-panel" id="tab-tts">
+        <div class="page-header">
+          <div><h1>TTS &amp; Chat</h1><p>Независимые голосовые пресеты для TikTok-чата и AxelChat</p></div>
+        </div>
+
+        <div class="grid-2">
+          <div class="card" data-preset-panel="tiktok">
+            <h3 class="card-title">🔴 Голос для TikTok-чата</h3>
+            <label class="checkbox-row"><input type="checkbox" data-f="enabled"> Озвучка включена</label>
+            <div class="field"><label>Голос</label><select data-f="voice_uri"></select></div>
+            <div class="field"><label>Скорость: <span data-f="rate_val">1.00</span></label><input type="range" min="0.5" max="2" step="0.05" data-f="rate"></div>
+            <div class="field"><label>Высота тона: <span data-f="pitch_val">1.00</span></label><input type="range" min="0" max="2" step="0.05" data-f="pitch"></div>
+            <div class="field"><label>Громкость: <span data-f="volume_val">1.00</span></label><input type="range" min="0" max="1" step="0.05" data-f="volume"></div>
+            <div class="grid-2">
+              <label class="checkbox-row"><input type="checkbox" data-f="read_chat"> Читать чат</label>
+              <label class="checkbox-row"><input type="checkbox" data-f="read_gifts"> Читать подарки</label>
+              <label class="checkbox-row"><input type="checkbox" data-f="read_follows"> Читать подписки (follow)</label>
+              <label class="checkbox-row"><input type="checkbox" data-f="read_subscribes"> Читать sub</label>
+            </div>
+            <div class="field"><label>Озвучивать подарки от N монет</label><input type="number" min="0" data-f="min_gift_coins"></div>
+            <div class="field"><label>Шаблон чата</label><textarea data-f="chat_template" rows="2"></textarea></div>
+            <div class="field"><label>Шаблон подарка</label><textarea data-f="gift_template" rows="2"></textarea></div>
+            <div class="field"><label>Тестовый текст</label><input type="text" data-f="test_text" placeholder="Проверка голоса"></div>
+            <div class="row">
+              <button type="button" class="btn" data-action="test">▶ Проверить голос</button>
+              <button type="button" class="btn primary" data-action="save">Сохранить</button>
+            </div>
+          </div>
+
+          <div class="card" data-preset-panel="axelchat">
+            <h3 class="card-title">💬 Голос для AxelChat</h3>
+            <label class="checkbox-row"><input type="checkbox" data-f="enabled"> Озвучка включена</label>
+            <div class="field"><label>Голос</label><select data-f="voice_uri"></select></div>
+            <div class="field"><label>Скорость: <span data-f="rate_val">1.00</span></label><input type="range" min="0.5" max="2" step="0.05" data-f="rate"></div>
+            <div class="field"><label>Высота тона: <span data-f="pitch_val">1.00</span></label><input type="range" min="0" max="2" step="0.05" data-f="pitch"></div>
+            <div class="field"><label>Громкость: <span data-f="volume_val">1.00</span></label><input type="range" min="0" max="1" step="0.05" data-f="volume"></div>
+            <div class="grid-2">
+              <label class="checkbox-row"><input type="checkbox" data-f="read_chat"> Читать чат</label>
+              <label class="checkbox-row"><input type="checkbox" data-f="read_gifts"> Читать подарки</label>
+              <label class="checkbox-row"><input type="checkbox" data-f="read_follows"> Читать подписки (follow)</label>
+              <label class="checkbox-row"><input type="checkbox" data-f="read_subscribes"> Читать sub</label>
+            </div>
+            <div class="field"><label>Озвучивать подарки от N монет</label><input type="number" min="0" data-f="min_gift_coins"></div>
+            <div class="field"><label>Шаблон чата</label><textarea data-f="chat_template" rows="2"></textarea></div>
+            <div class="field"><label>Шаблон подарка</label><textarea data-f="gift_template" rows="2"></textarea></div>
+            <div class="field"><label>Тестовый текст</label><input type="text" data-f="test_text" placeholder="Проверка голоса"></div>
+            <div class="row">
+              <button type="button" class="btn" data-action="test">▶ Проверить голос</button>
+              <button type="button" class="btn primary" data-action="save">Сохранить</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title">🚫 Фильтр ненормативной лексики / Regex</h3>
+          <form id="form-profanity-rule" class="row wrap">
+            <input type="text" id="rule-pattern" placeholder="слово или регулярное выражение" style="flex:2" required>
+            <label class="checkbox-row"><input type="checkbox" id="rule-is-regex"> regex</label>
+            <input type="text" id="rule-flags" placeholder="флаги (giu)" value="giu" style="width:90px">
+            <input type="text" id="rule-replacement" placeholder="замена" value="***" style="width:110px">
+            <button type="submit" class="btn primary">Добавить</button>
+          </form>
+          <table style="margin-top:10px">
+            <thead><tr><th>Правило</th><th>Тип</th><th>Замена</th><th>Вкл.</th><th></th></tr></thead>
+            <tbody id="profanity-tbody"></tbody>
+          </table>
+          <div class="list-empty" id="profanity-empty">Правил пока нет.</div>
+
+          <div class="field" style="margin-top:14px">
+            <label>Проверить фильтр на тексте</label>
+            <div class="row"><input type="text" id="filter-test-input" style="flex:1" placeholder="введите текст для проверки">
+              <button type="button" class="btn" id="btn-test-filter">Проверить</button></div>
+            <div class="hint" id="filter-test-output"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================== IoT Devices ===================== -->
+      <section class="tab-panel" id="tab-iot">
+        <div class="page-header">
+          <div><h1>IoT Devices</h1><p>Устройства (например ESP32), управляемые по HTTP, и проверка связи (health ping)</p></div>
+          <button class="btn primary" id="btn-new-iot-device">+ Новое устройство</button>
+        </div>
+
+        <form class="card" id="iot-form" style="display:none">
+          <h3 class="card-title" id="iot-form-title">Новое устройство</h3>
+          <div class="grid-2">
+            <div class="field"><label>Название</label><input type="text" id="iot-name" required></div>
+            <div class="field"><label>Base URL</label><input type="text" id="iot-base-url" placeholder="http://192.168.1.50" required></div>
+          </div>
+          <div class="grid-2">
+            <div class="field"><label>Путь для health ping</label><input type="text" id="iot-ping-path" value="/ping"></div>
+            <div class="field"><label>Интервал проверки (мс)</label><input type="number" id="iot-ping-interval" value="15000" min="1000"></div>
+          </div>
+          <label class="checkbox-row"><input type="checkbox" id="iot-ping-enabled" checked> Включить автоматическую проверку связи</label>
+          <div class="row" style="margin-top:14px">
+            <button type="submit" class="btn primary">Сохранить</button>
+            <button type="button" class="btn ghost" id="btn-cancel-iot-form">Отмена</button>
+          </div>
+        </form>
+
+        <div class="card">
+          <table>
+            <thead><tr><th>Статус</th><th>Название</th><th>Base URL</th><th>Ping путь</th><th>Задержка</th><th></th></tr></thead>
+            <tbody id="iot-tbody"></tbody>
+          </table>
+          <div class="list-empty" id="iot-empty">Устройств пока нет.</div>
+        </div>
+      </section>
+
+      <!-- ===================== Media Library ===================== -->
+      <section class="tab-panel" id="tab-media">
+        <div class="page-header">
+          <div><h1>Media Library</h1><p>Файлы для алертов (.webm, .gif, .mp3, .wav, изображения) и виджеты OBS Browser Source</p></div>
+        </div>
+
+        <div class="card">
+          <div class="dropzone" id="media-dropzone">
+            Перетащите файлы сюда или нажмите, чтобы выбрать (.webm, .mp4, .gif, .png, .jpg, .mp3, .wav, .ogg)
+          </div>
+          <input type="file" id="media-file-input" multiple hidden accept=".webm,.mp4,.gif,.png,.jpg,.jpeg,.mp3,.wav,.ogg">
+          <div class="media-grid" id="media-grid" style="margin-top:16px"></div>
+          <div class="list-empty" id="media-empty">Медиатека пуста.</div>
+        </div>
+
+        <div class="page-header">
+          <div><h3 style="margin:0">Виджеты алертов</h3><p>Соответствие «медиафайл + текст + оформление» для OBS Browser Source</p></div>
+          <button class="btn primary" id="btn-new-widget">+ Новый виджет</button>
+        </div>
+
+        <form class="card" id="widget-form" style="display:none">
+          <h3 class="card-title" id="widget-form-title">Новый виджет</h3>
+          <div class="grid-2">
+            <div class="field"><label>Название</label><input type="text" id="widget-name" required></div>
+            <div class="field"><label>Медиафайл</label><select id="widget-media"></select></div>
+          </div>
+          <div class="grid-2">
+            <div class="field"><label>Длительность показа (мс)</label><input type="number" id="widget-duration" value="6000" min="500"></div>
+            <div class="field"><label>Текстовый шаблон</label><input type="text" id="widget-template" value="{user} — {message}"></div>
+          </div>
+          <div class="field"><label>Свой CSS (необязательно)</label><textarea id="widget-css" rows="4" placeholder=".alert-text { font-size: 32px; }"></textarea></div>
+          <div class="row" style="margin-top:10px">
+            <button type="submit" class="btn primary">Сохранить</button>
+            <button type="button" class="btn ghost" id="btn-cancel-widget-form">Отмена</button>
+          </div>
+        </form>
+
+        <div class="card">
+          <table>
+            <thead><tr><th>Название</th><th>Длительность</th><th>Шаблон текста</th><th></th></tr></thead>
+            <tbody id="widgets-tbody"></tbody>
+          </table>
+          <div class="list-empty" id="widgets-empty">Виджетов пока нет.</div>
+          <p class="hint" style="margin-top:12px">Добавьте в OBS источник «Браузер» с адресом <code id="overlay-url-hint"></code> — все алерты будут появляться там автоматически.</p>
+        </div>
+      </section>
+
+      <!-- ===================== Logs & Settings ===================== -->
+      <section class="tab-panel" id="tab-logs">
+        <div class="page-header">
+          <div><h1>Logs &amp; Settings</h1><p>Оформление приложения и журнал событий</p></div>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title">🎨 Тема оформления</h3>
+          <div class="theme-swatches">
+            <div class="theme-swatch" data-swatch="electric-blue" title="Electric Blue"></div>
+            <div class="theme-swatch" data-swatch="neon-purple" title="Neon Purple"></div>
+            <div class="theme-swatch" data-swatch="cyber-green" title="Cyber Green"></div>
+            <div class="theme-swatch" data-swatch="crimson-dark" title="Crimson Dark"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="row between">
+            <h3 class="card-title" style="margin:0">📋 Журнал событий</h3>
+            <div class="row">
+              <select id="log-filter">
+                <option value="all">Все категории</option>
+                <option value="tiktok">TikTok</option>
+                <option value="axelchat">AxelChat</option>
+                <option value="trigger">Триггеры</option>
+                <option value="tts">TTS</option>
+                <option value="iot">IoT</option>
+                <option value="system">Система</option>
+              </select>
+              <button class="btn small danger" id="btn-clear-logs">Очистить</button>
+            </div>
+          </div>
+          <div class="log-stream" id="log-stream" style="max-height:420px; overflow-y:auto; margin-top:10px"></div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

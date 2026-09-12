@@ -1,0 +1,71 @@
+{
+  "name": "neurostream-studio",
+  "productName": "NeuroStream Studio",
+  "version": "1.0.0",
+  "description": "Настольное приложение для управления TikTok LIVE трансляциями: TTS, триггеры, IoT, алерты для OBS",
+  "author": "NeuroStream Studio",
+  "license": "UNLICENSED",
+  "private": true,
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "cross-env NODE_ENV=development electron .",
+    "server:only": "node src/server/index.js",
+    "rebuild": "electron-rebuild -f -w better-sqlite3",
+    "postinstall": "electron-builder install-app-deps",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder --win nsis"
+  },
+  "dependencies": {
+    "better-sqlite3": "^13.0.3",
+    "express": "^5.2.1",
+    "multer": "^2.3.0",
+    "socket.io": "^4.8.3",
+    "tiktok-live-connector": "^2.4.4",
+    "ws": "^8.21.3"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^3.7.0",
+    "cross-env": "^7.0.3",
+    "electron": "^44.3.0",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "com.neurostreamstudio.app",
+    "productName": "NeuroStream Studio",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "package.json",
+      "!src/renderer/**/*.map"
+    ],
+    "extraResources": [
+      {
+        "from": "src/server/db/schema.sql",
+        "to": "schema.sql"
+      }
+    ],
+    "asarUnpack": [
+      "**/node_modules/better-sqlite3/**"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "NeuroStream Studio"
+    }
+  }
+}

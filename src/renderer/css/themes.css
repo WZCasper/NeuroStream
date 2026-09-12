@@ -1,0 +1,35 @@
+/* NeuroStream Studio — темы оформления.
+   Каждая тема переопределяет только акцентные переменные и, при необходимости,
+   слегка меняет фон панелей — структура и разметка остаются едиными (base.css). */
+
+:root[data-theme='electric-blue'] {
+  --accent-primary: #00d9ff;
+  --accent-secondary: #0072ff;
+  --accent-glow: rgba(0, 217, 255, 0.55);
+}
+
+:root[data-theme='neon-purple'] {
+  --accent-primary: #b967ff;
+  --accent-secondary: #6e00ff;
+  --accent-glow: rgba(185, 103, 255, 0.55);
+}
+
+:root[data-theme='cyber-green'] {
+  --accent-primary: #00e676;
+  --accent-secondary: #00b34d;
+  --accent-glow: rgba(0, 230, 118, 0.5);
+}
+
+:root[data-theme='crimson-dark'] {
+  --accent-primary: #ff2b4e;
+  --accent-secondary: #8b0018;
+  --accent-glow: rgba(255, 43, 78, 0.5);
+  --bg-app: #100a0d;
+  --bg-panel: #160f13;
+  --bg-elevated: #1d1318;
+}
+
+.theme-swatch[data-swatch='electric-blue'] { background: linear-gradient(135deg, #00d9ff, #0072ff); }
+.theme-swatch[data-swatch='neon-purple'] { background: linear-gradient(135deg, #b967ff, #6e00ff); }
+.theme-swatch[data-swatch='cyber-green'] { background: linear-gradient(135deg, #00e676, #00b34d); }
+.theme-swatch[data-swatch='crimson-dark'] { background: linear-gradient(135deg, #ff2b4e, #8b0018); }

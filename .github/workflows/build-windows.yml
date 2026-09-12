@@ -1,0 +1,53 @@
+name: Build Windows installer
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies (and rebuild native modules for Electron)
+        run: npm install
+
+      - name: Build Windows installer (electron-builder)
+        run: npm run dist
+
+      - name: Locate installer
+        id: find_installer
+        shell: bash
+        run: |
+          installer=$(ls release/*.exe | head -n 1)
+          echo "path=$installer" >> "$GITHUB_OUTPUT"
+          echo "name=$(basename "$installer")" >> "$GITHUB_OUTPUT"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NeuroStream-Studio-Windows-Installer
+          path: release/*.exe
+          retention-days: 30
+
+      - name: Create GitHub Release with installer
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          tag="build-${{ github.run_number }}"
+          gh release create "$tag" "${{ steps.find_installer.outputs.path }}" \
+            --title "NeuroStream Studio — сборка #${{ github.run_number }}" \
+            --notes "Автоматическая сборка Windows-установщика из коммита ${{ github.sha }}." \
+            --repo "${{ github.repository }}"
