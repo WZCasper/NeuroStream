@@ -14,7 +14,7 @@
     "rebuild": "electron-rebuild -f -w better-sqlite3",
     "postinstall": "electron-builder install-app-deps",
     "pack": "electron-builder --dir",
-    "dist": "electron-builder --win nsis"
+    "dist": "electron-builder --win nsis --publish=never"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",
