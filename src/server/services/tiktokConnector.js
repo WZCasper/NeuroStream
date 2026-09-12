@@ -47,6 +47,8 @@ class TikTokConnectorService extends EventEmitter {
     this.connection = null;
     this.uniqueId = null;
     this.signApiKey = null;
+    this.sessionId = null;
+    this.ttTargetIdc = null;
     this.status = 'idle';
     this.roomId = null;
     this.viewerCount = 0;
@@ -63,6 +65,7 @@ class TikTokConnectorService extends EventEmitter {
       uniqueId: this.uniqueId,
       roomId: this.roomId,
       viewerCount: this.viewerCount,
+      chatReplyAvailable: this.hasAuthenticatedSession(),
     };
   }
 
@@ -76,14 +79,63 @@ class TikTokConnectorService extends EventEmitter {
   /**
    * Запускает подключение к TikTok LIVE указанного пользователя.
    * @param {string} uniqueId  @username стримера (с "@" или без)
-   * @param {{ signApiKey?: string }} [options]
+   * @param {{ signApiKey?: string, sessionId?: string, ttTargetIdc?: string }} [options]
    */
   async start(uniqueId, options = {}) {
     this._stopped = false;
     this.uniqueId = uniqueId.replace(/^@/, '').trim();
     this.signApiKey = options.signApiKey || null;
+    this.sessionId = options.sessionId || null;
+    this.ttTargetIdc = options.ttTargetIdc || null;
     this._reconnectAttempt = 0;
     await this._connectOnce();
+  }
+
+  /** Есть ли сохранённая авторизованная сессия — от неё зависит доступность отправки сообщений в чат. */
+  hasAuthenticatedSession() {
+    return Boolean(this.sessionId && this.ttTargetIdc);
+  }
+
+  /**
+   * Отправляет текстовое сообщение в чат текущей трансляции от имени авторизованного аккаунта.
+   * Требует, чтобы при подключении были указаны sessionId и ttTargetIdc (сессионные cookie
+   * из браузера, где выполнен вход в тот же TikTok-аккаунт, которым будет отправляться сообщение).
+   * @param {string} text
+   */
+  async sendMessage(text) {
+    if (!this.connection || this.status !== 'connected') {
+      throw new Error('Нет активного подключения к TikTok LIVE');
+    }
+    if (!this.hasAuthenticatedSession()) {
+      throw new Error(
+        'Не указаны сессионные cookie TikTok (sessionId и ttTargetIdc) — без них отправка сообщений в чат недоступна, только чтение'
+      );
+    }
+    try {
+      const result = await this.connection.sendMessage(text);
+      this.logger.info('tiktok', `Отправлено сообщение в чат: «${text}»`);
+      return result;
+    } catch (err) {
+      this.logger.error('tiktok', `Не удалось отправить сообщение в чат: ${err.message}`);
+      throw err;
+    }
+  }
+
+  /**
+   * Быстрая проверка «идёт ли сейчас трансляция», без установки полного соединения —
+   * один HTTP-запрос вместо полного WebSocket-хэндшейка. Полезно для мгновенной диагностики
+   * перед подключением: если аккаунт не в эфире, connect() всё равно завершится ошибкой
+   * UserOfflineError, но эта проверка даёт ответ быстрее и не трогает основное соединение.
+   * @param {string} uniqueId
+   * @returns {Promise<boolean>}
+   */
+  async checkIsLive(uniqueId) {
+    const cleanId = uniqueId.replace(/^@/, '').trim();
+    const probe = new TikTokLiveConnection(cleanId, {
+      fetchRoomInfoOnConnect: false,
+      processInitialData: false,
+    });
+    return probe.fetchIsLive();
   }
 
   /** Останавливает подключение и отменяет запланированные переподключения. */
@@ -116,6 +168,21 @@ class TikTokConnectorService extends EventEmitter {
     if (this.signApiKey) {
       connectionOptions.signApiKey = this.signApiKey;
     }
+    if (this.hasAuthenticatedSession()) {
+      // Cookie нужны для отправки сообщений (sendMessage) через обычные HTTP-запросы.
+      // authenticateWs сюда намеренно НЕ передаём: чтение чата остаётся в обычном
+      // публичном режиме и не зависит от валидности сессии — если cookie устареют,
+      // сломается только отправка сообщений, а не всё подключение целиком.
+      connectionOptions.session = {
+        cookie: {
+          type: 'cookie',
+          value: {
+            sessionId: this.sessionId,
+            ttTargetIdc: this.ttTargetIdc,
+          },
+        },
+      };
+    }
 
     this.connection = new TikTokLiveConnection(this.uniqueId, connectionOptions);
     this._attachEventHandlers(this.connection);
@@ -127,6 +194,7 @@ class TikTokConnectorService extends EventEmitter {
       this._setStatus('connected');
       this.logger.info('tiktok', `Подключено к трансляции @${this.uniqueId}`, {
         roomId: this.roomId,
+        chatReplyAvailable: this.hasAuthenticatedSession(),
       });
     } catch (err) {
       this._handleConnectError(err);

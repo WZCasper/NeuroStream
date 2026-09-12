@@ -56,7 +56,8 @@ async function createServer({ userDataDir, electronApp = null }) {
     profanityFilter,
     iotService,
     logger,
-    (source) => repos.ttsPresets.getForSource(source)
+    (source) => repos.ttsPresets.getForSource(source),
+    tiktokConnector
   );
 
   const app = express();
@@ -133,7 +134,11 @@ async function createServer({ userDataDir, electronApp = null }) {
   // ---------------- Автозапуск подключений, если ранее настроены ----------------
   const savedTikTokUsername = settings.get('tiktokUniqueId');
   if (savedTikTokUsername && settings.get('tiktokAutoConnect') === '1') {
-    tiktokConnector.start(savedTikTokUsername, { signApiKey: settings.get('tiktokSignApiKey') || undefined });
+    tiktokConnector.start(savedTikTokUsername, {
+      signApiKey: settings.get('tiktokSignApiKey') || undefined,
+      sessionId: settings.get('tiktokSessionId') || undefined,
+      ttTargetIdc: settings.get('tiktokTtTargetIdc') || undefined,
+    });
   }
   if (settings.get('axelchatAutoConnect') === '1') {
     axelChatConnector.start({

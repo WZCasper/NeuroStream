@@ -31,9 +31,13 @@ async function loadSettingsIntoForms() {
   const settings = await api.get('/api/settings');
   const uniqueIdInput = document.getElementById('tiktok-unique-id');
   const signApiKeyInput = document.getElementById('tiktok-sign-key');
+  const sessionIdInput = document.getElementById('tiktok-session-id');
+  const ttTargetIdcInput = document.getElementById('tiktok-tt-target-idc');
   const autoConnectInput = document.getElementById('tiktok-auto-connect');
   if (settings.tiktokUniqueId) uniqueIdInput.value = settings.tiktokUniqueId;
   if (settings.tiktokSignApiKey) signApiKeyInput.value = settings.tiktokSignApiKey;
+  if (settings.tiktokSessionId) sessionIdInput.value = settings.tiktokSessionId;
+  if (settings.tiktokTtTargetIdc) ttTargetIdcInput.value = settings.tiktokTtTargetIdc;
   autoConnectInput.checked = settings.tiktokAutoConnect === '1';
 
   const hostInput = document.getElementById('axelchat-host');
@@ -50,10 +54,12 @@ function bindTikTokForm() {
     e.preventDefault();
     const uniqueId = document.getElementById('tiktok-unique-id').value.trim();
     const signApiKey = document.getElementById('tiktok-sign-key').value.trim();
+    const sessionId = document.getElementById('tiktok-session-id').value.trim();
+    const ttTargetIdc = document.getElementById('tiktok-tt-target-idc').value.trim();
     const autoConnect = document.getElementById('tiktok-auto-connect').checked;
     if (!uniqueId) return toast('Укажите @uniqueId стримера', 'error');
     try {
-      await api.post('/api/tiktok/connect', { uniqueId, signApiKey, autoConnect });
+      await api.post('/api/tiktok/connect', { uniqueId, signApiKey, sessionId, ttTargetIdc, autoConnect });
       toast(`Подключение к @${uniqueId.replace(/^@/, '')} запущено`, 'success');
     } catch (err) {
       toast(err.message, 'error');
@@ -65,9 +71,29 @@ function bindTikTokForm() {
     toast('TikTok LIVE отключён', 'info');
   });
 
+  document.getElementById('btn-tiktok-check-live').addEventListener('click', async () => {
+    const uniqueId = document.getElementById('tiktok-unique-id').value.trim();
+    const resultEl = document.getElementById('tiktok-check-live-result');
+    if (!uniqueId) return toast('Сначала укажите @uniqueId стримера', 'error');
+    resultEl.textContent = 'Проверяю…';
+    try {
+      const { isLive } = await api.post('/api/tiktok/check-live', { uniqueId });
+      resultEl.textContent = isLive
+        ? `✅ @${uniqueId.replace(/^@/, '')} сейчас в эфире — можно подключаться`
+        : `⛔ @${uniqueId.replace(/^@/, '')} сейчас НЕ в эфире — подключение выдаст ошибку, пока трансляция не начнётся`;
+    } catch (err) {
+      resultEl.textContent = `Не удалось проверить: ${err.message}`;
+    }
+  });
+
   socket.on('tiktok:status', (state) => {
     const el = document.getElementById('tiktok-status-detail');
-    el.textContent = state.message || '';
+    const parts = [];
+    if (state.message) parts.push(state.message);
+    if (state.status === 'connected') {
+      parts.push(state.chatReplyAvailable ? '💬 Ответ в чат доступен' : 'ℹ️ Ответ в чат недоступен — не указаны сессионные cookie');
+    }
+    el.textContent = parts.join(' · ');
   });
 }
 

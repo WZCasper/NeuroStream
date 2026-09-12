@@ -15,6 +15,7 @@ const ACTION_TYPE_LABELS = {
   sound: 'Звуковой файл',
   http: 'HTTP-запрос / IoT',
   tts: 'Озвучка (TTS)',
+  chat_reply: 'Ответ в чат (только TikTok)',
 };
 
 let editingId = null; // null = создание нового триггера
@@ -80,6 +81,8 @@ function actionConfigFieldsHtml(actionType, config = {}) {
     }
     case 'tts':
       return `<textarea data-action-cfg="template" placeholder="Оставьте пустым, чтобы использовать шаблон по умолчанию из вкладки TTS & Chat">${escapeAttr(config.template || '')}</textarea>`;
+    case 'chat_reply':
+      return `<textarea data-action-cfg="text" placeholder="Например: Спасибо, {user}, за {gift}! Работает только для TikTok и только если указаны сессионные cookie на вкладке Главная.">${escapeAttr(config.text || '')}</textarea>`;
     default:
       return '';
   }

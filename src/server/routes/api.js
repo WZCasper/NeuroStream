@@ -47,16 +47,22 @@ function createApiRouter(ctx) {
   });
 
   router.post('/tiktok/connect', async (req, res) => {
-    const { uniqueId, signApiKey, autoConnect } = req.body || {};
+    const { uniqueId, signApiKey, sessionId, ttTargetIdc, autoConnect } = req.body || {};
     if (!uniqueId || !String(uniqueId).trim()) {
       return res.status(400).json({ error: 'Не указан @uniqueId стримера' });
     }
     settings.set('tiktokUniqueId', uniqueId);
     if (signApiKey !== undefined) settings.set('tiktokSignApiKey', signApiKey);
+    if (sessionId !== undefined) settings.set('tiktokSessionId', sessionId);
+    if (ttTargetIdc !== undefined) settings.set('tiktokTtTargetIdc', ttTargetIdc);
     settings.set('tiktokAutoConnect', autoConnect ? '1' : '0');
 
     try {
-      await tiktokConnector.start(uniqueId, { signApiKey: signApiKey || settings.get('tiktokSignApiKey') || undefined });
+      await tiktokConnector.start(uniqueId, {
+        signApiKey: signApiKey || settings.get('tiktokSignApiKey') || undefined,
+        sessionId: sessionId || settings.get('tiktokSessionId') || undefined,
+        ttTargetIdc: ttTargetIdc || settings.get('tiktokTtTargetIdc') || undefined,
+      });
       res.json(tiktokConnector.getState());
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -67,6 +73,20 @@ function createApiRouter(ctx) {
     settings.set('tiktokAutoConnect', '0');
     await tiktokConnector.stop();
     res.json(tiktokConnector.getState());
+  });
+
+  // Быстрая проверка "в эфире ли аккаунт" без установки полного соединения.
+  router.post('/tiktok/check-live', async (req, res) => {
+    const { uniqueId } = req.body || {};
+    if (!uniqueId || !String(uniqueId).trim()) {
+      return res.status(400).json({ error: 'Не указан @uniqueId стримера' });
+    }
+    try {
+      const isLive = await tiktokConnector.checkIsLive(uniqueId);
+      res.json({ isLive });
+    } catch (err) {
+      res.status(502).json({ error: err.message });
+    }
   });
 
   // ============================== AxelChat ==============================

@@ -55,12 +55,28 @@
               <div class="field"><label>Ключ Euler Stream signApiKey (необязательно)</label>
                 <input type="password" id="tiktok-sign-key" placeholder="повышает лимит запросов подписи">
                 <span class="hint">Без ключа действует бесплатный общий лимит сервиса подписи TikTok. Ключ можно получить на eulerstream.com.</span></div>
+
+              <div class="field">
+                <label>Сессионные cookie аккаунта (необязательно — только для ответа в чат текстом)</label>
+                <div class="grid-2">
+                  <input type="password" id="tiktok-session-id" placeholder="sessionid">
+                  <input type="password" id="tiktok-tt-target-idc" placeholder="tt-target-idc">
+                </div>
+                <span class="hint">Без этих значений программа только читает чат. Чтобы триггеры могли отвечать текстом
+                  в чат от вашего имени (действие «Ответ в чат»), нужно один раз взять эти два cookie из браузера,
+                  где вы вошли в свой TikTok-аккаунт: откройте tiktok.com → DevTools (F12) → вкладка Application/Storage →
+                  Cookies → tiktok.com → скопируйте значения <code>sessionid</code> и <code>tt-target-idc</code>.
+                  Это как пароль от аккаунта — никому их не показывайте, они хранятся только локально на вашем компьютере.</span>
+              </div>
+
               <label class="checkbox-row"><input type="checkbox" id="tiktok-auto-connect"> Подключаться автоматически при запуске</label>
               <div class="row" style="margin-top:10px">
                 <button type="submit" class="btn primary">Подключиться</button>
                 <button type="button" id="btn-tiktok-disconnect" class="btn ghost">Отключить</button>
+                <button type="button" id="btn-tiktok-check-live" class="btn ghost">Проверить, в эфире ли</button>
               </div>
               <p class="hint" id="tiktok-status-detail" style="margin-top:8px"></p>
+              <p class="hint" id="tiktok-check-live-result"></p>
             </form>
           </div>
 

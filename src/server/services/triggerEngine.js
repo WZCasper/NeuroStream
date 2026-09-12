@@ -8,13 +8,13 @@ const { EventEmitter } = require('node:events');
  * и выполняет цепочку действий по порядку (order_index) для каждого совпавшего триггера.
  *
  * Типы событий триггера (event_type): 'gift' | 'chat_keyword' | 'follow' | 'share' | 'subscribe' | 'like'
- * Типы действий (action_type):        'alert' | 'sound' | 'http' | 'tts'
+ * Типы действий (action_type):        'alert' | 'sound' | 'http' | 'tts' | 'chat_reply'
  *
- * Внешние побочные эффекты (алерт в OBS, IoT-запрос, озвучка) не выполняются
+ * Внешние побочные эффекты (алерт в OBS, IoT-запрос, озвучка, ответ в чат) не выполняются
  * напрямую в обход соответствующих сервисов — движок делегирует их
- * TTSQueueManager и IoTService, а для alert/sound публикует событие 'action',
- * на которое подписывается index.js и пересылает команду в OBS Browser Source
- * через Socket.io.
+ * TTSQueueManager, IoTService и TikTokConnectorService (для ответа в чат), а для alert/sound
+ * публикует событие 'action', на которое подписывается index.js и пересылает команду
+ * в OBS Browser Source через Socket.io.
  *
  * @fires TriggerEngine#action { type: 'alert'|'sound', triggerId, config }
  * @fires TriggerEngine#matched { triggerId, triggerName, event }
@@ -28,8 +28,9 @@ class TriggerEngine extends EventEmitter {
    * @param {import('./iotService').IoTService} iotService
    * @param {import('../lib/logger').Logger} logger
    * @param {() => object} getTtsPresetForSource  Функция, возвращающая активный пресет озвучки для source
+   * @param {import('./tiktokConnector').TikTokConnectorService} tiktokConnector  Нужен для действия "Ответ в чат"
    */
-  constructor(db, eventBus, ttsQueue, profanityFilter, iotService, logger, getTtsPresetForSource) {
+  constructor(db, eventBus, ttsQueue, profanityFilter, iotService, logger, getTtsPresetForSource, tiktokConnector) {
     super();
     this.db = db;
     this.eventBus = eventBus;
@@ -38,6 +39,7 @@ class TriggerEngine extends EventEmitter {
     this.iotService = iotService;
     this.logger = logger;
     this.getTtsPresetForSource = getTtsPresetForSource;
+    this.tiktokConnector = tiktokConnector;
 
     this.triggers = [];
     this.reload();
@@ -194,6 +196,32 @@ class TriggerEngine extends EventEmitter {
           pitch: preset.pitch,
           volume: preset.volume,
         });
+        break;
+      }
+
+      case 'chat_reply': {
+        // Отправка текстового ответа обратно в чат трансляции (не озвучка, а именно
+        // текстовое сообщение от лица подключённого аккаунта). Сейчас реализовано
+        // только для TikTok — у него есть подтверждённый рабочий метод отправки
+        // сообщений (sendMessage), но он требует авторизованной сессии (см. настройки
+        // на вкладке Главная). Для платформ, подключённых через AxelChat, отправка
+        // сообщений пока не поддерживается — у AxelChat нет для этого документированного API.
+        const cfg = action.config || {};
+        const template = cfg.text || '{user}, спасибо!';
+        const rendered = this.profanityFilter.apply(renderTemplate(template, event));
+
+        if (event.source !== 'tiktok') {
+          this.logger.warn(
+            'trigger',
+            `Действие "Ответ в чат" пропущено: источник "${event.source}" пока не поддерживает отправку сообщений (только TikTok с авторизованной сессией)`
+          );
+          break;
+        }
+        try {
+          await this.tiktokConnector.sendMessage(rendered);
+        } catch (err) {
+          this.logger.error('trigger', `Не удалось отправить ответ в чат TikTok: ${err.message}`);
+        }
         break;
       }
 
