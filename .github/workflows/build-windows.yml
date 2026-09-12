@@ -21,13 +21,21 @@ jobs:
           node-version: '22'
 
       - name: Install dependencies (and rebuild native modules for Electron)
-        run: npm install
+        id: install
+        shell: bash
+        continue-on-error: true
+        run: npm install 2>&1 | tee install.log
 
       - name: Build Windows installer (electron-builder)
-        run: npm run dist
+        id: build
+        if: steps.install.outcome == 'success'
+        shell: bash
+        continue-on-error: true
+        run: npm run dist 2>&1 | tee build.log
 
       - name: Locate installer
         id: find_installer
+        if: steps.build.outcome == 'success'
         shell: bash
         run: |
           installer=$(ls release/*.exe | head -n 1)
@@ -35,6 +43,7 @@ jobs:
           echo "name=$(basename "$installer")" >> "$GITHUB_OUTPUT"
 
       - name: Upload build artifact
+        if: steps.build.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: NeuroStream-Studio-Windows-Installer
@@ -42,6 +51,7 @@ jobs:
           retention-days: 30
 
       - name: Create GitHub Release with installer
+        if: steps.build.outcome == 'success'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
@@ -51,3 +61,24 @@ jobs:
             --title "NeuroStream Studio — сборка #${{ github.run_number }}" \
             --notes "Автоматическая сборка Windows-установщика из коммита ${{ github.sha }}." \
             --repo "${{ github.repository }}"
+
+      - name: Publish diagnostic logs on failure
+        if: steps.install.outcome == 'failure' || steps.build.outcome == 'failure'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.email "actions@github.com"
+          git config user.name "github-actions[bot]"
+          git checkout -B ci-logs
+          mkdir -p ci-logs
+          cp install.log ci-logs/install-latest.log 2>/dev/null || echo "(no install.log)" > ci-logs/install-latest.log
+          cp build.log ci-logs/build-latest.log 2>/dev/null || echo "(no build.log)" > ci-logs/build-latest.log
+          echo "run_number=${{ github.run_number }}" > ci-logs/meta.txt
+          git add ci-logs
+          git commit -m "CI diagnostic logs (run #${{ github.run_number }})" --allow-empty
+          git push -f origin ci-logs
+
+      - name: Fail job if install or build failed
+        if: steps.install.outcome == 'failure' || steps.build.outcome == 'failure'
+        run: exit 1
