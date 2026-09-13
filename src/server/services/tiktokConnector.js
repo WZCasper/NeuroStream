@@ -10,6 +10,9 @@ const {
   UserOfflineError,
   ConnectTimeoutError,
   SignatureRateLimitError,
+  SignatureMissingTokensError,
+  PremiumFeatureError,
+  InvalidUniqueIdError,
   AuthenticatedWebSocketConnectionError,
   SignAPIError,
 } = require('tiktok-live-connector');
@@ -202,20 +205,27 @@ class TikTokConnectorService extends EventEmitter {
   }
 
   _handleConnectError(err) {
-    let message = err && err.message ? err.message : String(err);
+    const original = err && err.message ? err.message : String(err);
+    let message = original;
     let category = 'error';
 
     if (err instanceof UserOfflineError) {
       message = `Стример @${this.uniqueId} сейчас не в эфире`;
       category = 'warn';
+    } else if (err instanceof InvalidUniqueIdError) {
+      message = `Некорректный @uniqueId: «${this.uniqueId}» — проверьте написание`;
     } else if (err instanceof SignatureRateLimitError) {
-      message = 'Превышен лимит запросов к серверу подписи (Euler Stream). Рекомендуется указать signApiKey в настройках.';
+      message = `Превышен лимит запросов к серверу подписи (Euler Stream). Укажите signApiKey в настройках. [${original}]`;
+    } else if (err instanceof SignatureMissingTokensError) {
+      message = `Сервер подписи вернул неполные данные (SignatureMissingTokensError) — обычно означает, что TikTok/Euler Stream временно поменяли формат ответа, либо использованный signApiKey недействителен. [${original}]`;
+    } else if (err instanceof PremiumFeatureError) {
+      message = `Эта операция требует платного тарифа Euler Stream (PremiumFeatureError) — проверьте тариф вашего signApiKey на eulerstream.com. [${original}]`;
     } else if (err instanceof ConnectTimeoutError) {
-      message = 'Время ожидания подключения истекло';
+      message = `Время ожидания подключения истекло — возможна блокировка сети/антивирусом или недоступность серверов TikTok. [${original}]`;
     } else if (err instanceof AuthenticatedWebSocketConnectionError) {
-      message = 'Ошибка авторизованного WebSocket-соединения';
+      message = `Ошибка авторизованного WebSocket-соединения (проверьте сессионные cookie). [${original}]`;
     } else if (err instanceof SignAPIError) {
-      message = 'Ошибка сервера подписи TikTok (Sign API)';
+      message = `Ошибка сервера подписи TikTok (Sign API): ${original}`;
     } else if (err instanceof AlreadyConnectedError || err instanceof AlreadyConnectingError) {
       // Безопасно игнорируем — соединение уже в процессе установки.
       return;
@@ -223,6 +233,7 @@ class TikTokConnectorService extends EventEmitter {
 
     this.logger[category === 'warn' ? 'warn' : 'error']('tiktok', message, {
       uniqueId: this.uniqueId,
+      errorClass: err && err.constructor ? err.constructor.name : typeof err,
     });
     this._setStatus('error', { message });
     this._scheduleReconnect();

@@ -62,11 +62,15 @@
                   <input type="password" id="tiktok-session-id" placeholder="sessionid">
                   <input type="password" id="tiktok-tt-target-idc" placeholder="tt-target-idc">
                 </div>
-                <span class="hint">Без этих значений программа только читает чат. Чтобы триггеры могли отвечать текстом
-                  в чат от вашего имени (действие «Ответ в чат»), нужно один раз взять эти два cookie из браузера,
-                  где вы вошли в свой TikTok-аккаунт: откройте tiktok.com → DevTools (F12) → вкладка Application/Storage →
+                <div class="row" style="margin-top:6px">
+                  <button type="button" id="btn-tiktok-browser-login" class="btn small">🌐 Войти через браузер (заполнит поля автоматически)</button>
+                </div>
+                <span class="hint">Нажмите кнопку выше — откроется настоящее окно входа TikTok, войдите в аккаунт как обычно
+                  (логин, пароль, код подтверждения — как всегда). После входа оба поля заполнятся сами. Вручную эти
+                  значения можно взять так: откройте tiktok.com → DevTools (F12) → вкладка Application/Storage →
                   Cookies → tiktok.com → скопируйте значения <code>sessionid</code> и <code>tt-target-idc</code>.
-                  Это как пароль от аккаунта — никому их не показывайте, они хранятся только локально на вашем компьютере.</span>
+                  Это как пароль от аккаунта — никому их не показывайте, они хранятся только локально на вашем компьютере.
+                  Без этих значений программа только читает чат.</span>
               </div>
 
               <label class="checkbox-row"><input type="checkbox" id="tiktok-auto-connect"> Подключаться автоматически при запуске</label>

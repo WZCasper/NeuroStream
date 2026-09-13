@@ -86,6 +86,21 @@ function bindTikTokForm() {
     }
   });
 
+  document.getElementById('btn-tiktok-browser-login').addEventListener('click', async () => {
+    if (!window.nss?.loginToTikTokWithBrowser) {
+      return toast('Вход через браузер доступен только в собранном приложении Electron', 'error');
+    }
+    toast('Открываю окно входа TikTok — войдите в аккаунт как обычно', 'info');
+    const result = await window.nss.loginToTikTokWithBrowser();
+    if (result.ok) {
+      document.getElementById('tiktok-session-id').value = result.sessionId;
+      document.getElementById('tiktok-tt-target-idc').value = result.ttTargetIdc;
+      toast('Вход выполнен — cookie получены, нажмите «Подключиться»', 'success');
+    } else {
+      toast(`Не удалось войти: ${result.error}`, 'error');
+    }
+  });
+
   socket.on('tiktok:status', (state) => {
     const el = document.getElementById('tiktok-status-detail');
     const parts = [];

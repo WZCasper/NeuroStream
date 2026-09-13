@@ -8,5 +8,6 @@ contextBridge.exposeInMainWorld('nss', {
   closeWindow: () => ipcRenderer.invoke('window:close'),
   getAppVersion: () => ipcRenderer.invoke('app:getVersion'),
   openExternal: (url) => ipcRenderer.invoke('app:openExternal', url),
+  loginToTikTokWithBrowser: () => ipcRenderer.invoke('tiktok:loginWithBrowser'),
   platform: process.platform,
 });

@@ -1,7 +1,7 @@
 'use strict';
 
 const path = require('node:path');
-const { app, BrowserWindow, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, session } = require('electron');
 const { createServer } = require('../server/index');
 
 /** @type {import('electron').BrowserWindow|null} */
@@ -73,6 +73,72 @@ async function bootstrap() {
   ttsHostWindow = createTtsHostWindow(serverInstance.port);
 }
 
+/**
+ * Открывает настоящее окно входа в TikTok (реальная страница tiktok.com/login в отдельном
+ * BrowserWindow с изолированной постоянной сессией) и ждёт, пока пользователь войдёт сам —
+ * логин/пароль/капча/2FA вводятся пользователем вручную, ничего не автоматизируется и не
+ * подделывается. После успешного входа TikTok сам выставляет cookie `sessionid` и
+ * `tt-target-idc` — как только оба появляются, они забираются из cookie-хранилища этого
+ * окна и возвращаются в приложение (используются только для действия «Ответ в чат»,
+ * само чтение чата от них не зависит).
+ * @returns {Promise<{ sessionId: string, ttTargetIdc: string }>}
+ */
+function openTikTokLoginWindow() {
+  return new Promise((resolve, reject) => {
+    const loginSession = session.fromPartition('persist:tiktok-login');
+    const loginWindow = new BrowserWindow({
+      width: 480,
+      height: 760,
+      title: 'Вход в TikTok — NeuroStream Studio',
+      parent: mainWindow || undefined,
+      webPreferences: {
+        session: loginSession,
+        contextIsolation: true,
+        nodeIntegration: false,
+      },
+    });
+
+    let settled = false;
+    let pollTimer = null;
+
+    const finishSuccess = (result) => {
+      if (settled) return;
+      settled = true;
+      clearInterval(pollTimer);
+      loginWindow.removeAllListeners('closed');
+      loginWindow.close();
+      resolve(result);
+    };
+
+    const finishFailure = (error) => {
+      if (settled) return;
+      settled = true;
+      clearInterval(pollTimer);
+      reject(error);
+    };
+
+    const checkCookies = async () => {
+      try {
+        const cookies = await loginSession.cookies.get({ domain: 'tiktok.com' });
+        const sessionCookie = cookies.find((c) => c.name === 'sessionid');
+        const targetIdcCookie = cookies.find((c) => c.name === 'tt-target-idc');
+        if (sessionCookie && targetIdcCookie) {
+          finishSuccess({ sessionId: sessionCookie.value, ttTargetIdc: targetIdcCookie.value });
+        }
+      } catch {
+        // Сессия окна ещё не готова / нет cookie — просто пробуем на следующем тике.
+      }
+    };
+
+    loginWindow.loadURL('https://www.tiktok.com/login');
+    pollTimer = setInterval(checkCookies, 1500);
+
+    loginWindow.on('closed', () => {
+      finishFailure(new Error('Окно входа закрыто до завершения авторизации — попробуйте снова и дождитесь полного входа в аккаунт'));
+    });
+  });
+}
+
 // ------------------------------- IPC: управление окном -------------------------------
 ipcMain.handle('window:minimize', () => mainWindow?.minimize());
 ipcMain.handle('window:maximizeToggle', () => {
@@ -84,6 +150,13 @@ ipcMain.handle('window:close', () => mainWindow?.close());
 ipcMain.handle('app:getVersion', () => app.getVersion());
 ipcMain.handle('app:openExternal', (event, url) => {
   if (typeof url === 'string' && /^https?:\/\//.test(url)) shell.openExternal(url);
+});
+ipcMain.handle('tiktok:loginWithBrowser', async () => {
+  try {
+    return { ok: true, ...(await openTikTokLoginWindow()) };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
 });
 
 app.whenReady().then(bootstrap);
