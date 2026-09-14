@@ -111,6 +111,18 @@
         </div>
 
         <div class="card">
+          <h3 class="card-title">🖥️ Оверлей в OBS / TikTok LIVE Studio</h3>
+          <div class="row" style="gap:10px">
+            <span class="badge off" id="overlay-connection-badge">Не подключено</span>
+            <span class="hint" id="overlay-connection-detail">Оверлей ещё не открыт ни в одной программе</span>
+          </div>
+          <p class="hint" style="margin-top:8px">Адрес для источника «Браузер» в OBS или Link Source в TikTok LIVE Studio:
+            <code id="overlay-url-hint-2"></code>. Если здесь написано «Не подключено», а вы уверены, что источник
+            добавлен — скорее всего, программа была перезапущена и слушает другой порт: обновите (Refresh) источник
+            в OBS/TikTok LIVE Studio или пересоздайте его с адресом выше.</p>
+        </div>
+
+        <div class="card">
           <h3 class="card-title">👀 Зрители по платформам (через AxelChat)</h3>
           <div id="platform-states-empty" class="list-empty">Подключитесь к AxelChat, чтобы увидеть суммарное число зрителей и статус каждой платформы.</div>
           <table id="platform-states-table" style="display:none">
@@ -363,8 +375,10 @@
           <h3 class="card-title" id="widget-form-title">Новый виджет</h3>
           <div class="field"><label>Название</label><input type="text" id="widget-name" data-emoji="1" required></div>
           <div class="grid-2">
-            <div class="field"><label>Основной медиафайл (картинка/видео/gif)</label><select id="widget-media"></select></div>
-            <div class="field"><label>Дополнительный медиафайл (необязательно — например, звук)</label><select id="widget-media-2"></select></div>
+            <div class="field"><label>Основной медиафайл</label><select id="widget-media"></select>
+              <span class="hint">Картинка, видео или GIF</span></div>
+            <div class="field"><label>Доп. медиафайл</label><select id="widget-media-2"></select>
+              <span class="hint">Необязательно — например, звук поверх анимации</span></div>
           </div>
           <div class="grid-2">
             <div class="field"><label>Длительность показа (мс)</label><input type="number" id="widget-duration" value="6000" min="500"></div>

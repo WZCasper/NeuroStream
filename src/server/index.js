@@ -91,6 +91,9 @@ async function createServer({ userDataDir, electronApp = null }) {
   );
 
   // ---------------- Socket.io: реальное время ----------------
+  const overlaySocketIds = new Set();
+  const broadcastOverlayCount = () => io.emit('overlay:connectionCount', overlaySocketIds.size);
+
   io.on('connection', (socket) => {
     // При подключении сразу отправляем текущее состояние, чтобы UI не ждал следующего события.
     socket.emit('tiktok:status', tiktokConnector.getState());
@@ -98,6 +101,21 @@ async function createServer({ userDataDir, electronApp = null }) {
     if (axelChatConnector.lastStates) socket.emit('axelchat:states', axelChatConnector.lastStates);
     socket.emit('log:recent', logger.recent(200));
     socket.emit('iot:devices', iotService.listDevices());
+    socket.emit('overlay:connectionCount', overlaySocketIds.size);
+
+    // Страница overlay.html (OBS Browser Source / TikTok LIVE Studio Link Source) сообщает
+    // о себе явно — это позволяет панели управления показать честный статус "подключено",
+    // а не предполагать, что где-то там всё работает.
+    socket.on('client:identify', ({ type } = {}) => {
+      if (type === 'overlay') {
+        overlaySocketIds.add(socket.id);
+        broadcastOverlayCount();
+      }
+    });
+
+    socket.on('disconnect', () => {
+      if (overlaySocketIds.delete(socket.id)) broadcastOverlayCount();
+    });
 
     socket.on('tts:utteranceEnd', ({ source, queueId }) => {
       ttsQueue.markDone(source, queueId);
@@ -176,7 +194,10 @@ async function createServer({ userDataDir, electronApp = null }) {
       await tiktokConnector.stop();
       axelChatConnector.stop();
       triggerEngine.destroy();
-      await new Promise((resolve) => httpServer.close(resolve));
+      // io.close() отключает все Socket.io-соединения (окна Electron держат их постоянно
+      // открытыми) и только после этого закрывает сам httpServer — обычный httpServer.close()
+      // без этого зависает навсегда, ожидая закрытия соединений, которые сами никогда не закроются.
+      await new Promise((resolve) => io.close(resolve));
       db.close();
     },
   };

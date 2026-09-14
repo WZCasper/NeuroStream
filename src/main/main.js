@@ -244,7 +244,22 @@ app.on('before-quit', async (event) => {
     event.preventDefault();
     const instance = serverInstance;
     serverInstance = null;
-    await instance.shutdown();
-    app.quit();
+
+    // Аварийная защита: даже если shutdown() по какой-то непредвиденной причине зависнет,
+    // процесс всё равно принудительно завершится через несколько секунд — программа
+    // не должна оставаться в диспетчере задач ни при каких обстоятельствах.
+    const forceExitTimer = setTimeout(() => {
+      app.exit(0);
+    }, 5000);
+    forceExitTimer.unref?.();
+
+    try {
+      await instance.shutdown();
+    } catch {
+      // даже если корректное закрытие не удалось — всё равно выходим
+    } finally {
+      clearTimeout(forceExitTimer);
+      app.quit();
+    }
   }
 });

@@ -236,11 +236,31 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+function bindOverlayStatus() {
+  const overlayHint = document.getElementById('overlay-url-hint-2');
+  if (overlayHint) overlayHint.textContent = `${window.location.origin}/overlay.html`;
+
+  socket.on('overlay:connectionCount', (count) => {
+    const badge = document.getElementById('overlay-connection-badge');
+    const detail = document.getElementById('overlay-connection-detail');
+    if (count > 0) {
+      badge.textContent = 'Подключено';
+      badge.className = 'badge on';
+      detail.textContent = count === 1 ? 'Оверлей открыт в 1 источнике' : `Оверлей открыт в ${count} источниках`;
+    } else {
+      badge.textContent = 'Не подключено';
+      badge.className = 'badge off';
+      detail.textContent = 'Оверлей ещё не открыт ни в одной программе';
+    }
+  });
+}
+
 export async function initDashboard() {
   bindTikTokForm();
   bindAxelChatForm();
   bindResourceMonitor();
   bindEventFeed();
+  bindOverlayStatus();
   socket.on('axelchat:states', renderPlatformStates);
   try {
     await loadSettingsIntoForms();

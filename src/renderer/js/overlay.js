@@ -1,5 +1,11 @@
 const socket = window.io();
 
+// Сообщаем серверу, что эта вкладка — именно страница оверлея (OBS/TikTok LIVE Studio),
+// чтобы в панели управления можно было увидеть реальный статус "подключено/не подключено",
+// а не гадать, смотрит ли OBS в тот же порт, что сейчас использует программа.
+socket.on('connect', () => socket.emit('client:identify', { type: 'overlay' }));
+socket.emit('client:identify', { type: 'overlay' });
+
 const root = document.getElementById('alert-root');
 const mediaSlot = root.querySelector('.alert-media-slot');
 const textEl = root.querySelector('.alert-text');
@@ -98,9 +104,7 @@ socket.on('overlay:alert', async (payload) => {
   if (!mediaById.size && !widgetsById.size) await refreshCaches();
   queue.push(payload);
   showNext();
-});
-
-socket.on('overlay:sound', async (payload) => {
+});socket.on('overlay:sound', async (payload) => {
   const mediaId = Number(payload.config?.mediaId);
   if (!mediaId) return;
   if (!mediaById.has(mediaId)) await refreshCaches();
