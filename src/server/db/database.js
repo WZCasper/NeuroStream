@@ -25,7 +25,26 @@ function openDatabase(userDataDir) {
   const schemaSql = fs.readFileSync(schemaPath, 'utf8');
   db.exec(schemaSql);
 
+  runMigrations(db);
+
   return db;
+}
+
+/**
+ * Лёгкие миграции для баз данных, созданных более старой версией схемы (schema.sql
+ * применяет только CREATE TABLE IF NOT EXISTS, поэтому не добавляет новые колонки
+ * в уже существующие таблицы — это дополняем здесь через ALTER TABLE ... ADD COLUMN).
+ */
+function runMigrations(db) {
+  addColumnIfMissing(db, 'alert_widgets', 'secondary_media_id', 'INTEGER REFERENCES media_files(id) ON DELETE SET NULL');
+}
+
+function addColumnIfMissing(db, table, column, definition) {
+  const columns = db.prepare(`PRAGMA table_info(${table})`).all();
+  const exists = columns.some((c) => c.name === column);
+  if (!exists) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  }
 }
 
 /**

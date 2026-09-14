@@ -1,7 +1,7 @@
 'use strict';
 
 const path = require('node:path');
-const { app, BrowserWindow, ipcMain, shell, session } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, session, Tray, Menu, dialog } = require('electron');
 const { createServer } = require('../server/index');
 
 /** @type {import('electron').BrowserWindow|null} */
@@ -10,6 +10,11 @@ let mainWindow = null;
 let ttsHostWindow = null;
 /** @type {Awaited<ReturnType<typeof createServer>>|null} */
 let serverInstance = null;
+/** @type {import('electron').Tray|null} */
+let tray = null;
+/** Флаг: true только когда пользователь осознанно выбрал полное закрытие (через диалог или трей) —
+ *  иначе клик по крестику окна будет каждый раз перехвачен диалогом подтверждения. */
+let isQuitting = false;
 
 const isDev = process.env.NODE_ENV === 'development';
 
@@ -22,6 +27,7 @@ function createMainWindow(port) {
     frame: false,
     backgroundColor: '#0b0d14',
     show: false,
+    icon: path.join(__dirname, '..', '..', 'build', 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -35,11 +41,68 @@ function createMainWindow(port) {
 
   if (isDev) win.webContents.openDevTools({ mode: 'detach' });
 
+  // Клик по крестику (или Alt+F4 и т.п.) не должен молча убивать процесс в фоне —
+  // спрашиваем у пользователя, что он на самом деле хочет сделать.
+  win.on('close', (event) => {
+    if (isQuitting) return; // это настоящее закрытие (через трей/диалог) — не перехватываем повторно
+
+    event.preventDefault();
+    const choice = dialog.showMessageBoxSync(win, {
+      type: 'question',
+      buttons: ['Закрыть программу', 'Свернуть в трей', 'Отмена'],
+      defaultId: 1,
+      cancelId: 2,
+      title: 'Закрыть NeuroStream Studio?',
+      message: 'Вы хотите закрыть программу полностью или свернуть её в трей?',
+      detail:
+        'При сворачивании в трей приложение продолжит работать в фоне: озвучка, триггеры и алерты для OBS останутся активными.',
+      noLink: true,
+    });
+
+    if (choice === 0) {
+      isQuitting = true;
+      app.quit();
+    } else if (choice === 1) {
+      win.hide();
+    }
+    // choice === 2 («Отмена») — ничего не делаем, окно остаётся открытым как было
+  });
+
   win.on('closed', () => {
     mainWindow = null;
   });
 
   return win;
+}
+
+/**
+ * Значок в системном трее — позволяет свернуть программу так, чтобы она реально
+ * продолжала работать в фоне (а не просто "зависала" невидимым процессом), и даёт
+ * явный способ полностью выйти из приложения.
+ */
+function createTray() {
+  const iconPath = path.join(__dirname, '..', '..', 'build', 'icon.png');
+  tray = new Tray(iconPath);
+  tray.setToolTip('NeuroStream Studio');
+  tray.setContextMenu(
+    Menu.buildFromTemplate([
+      {
+        label: 'Открыть NeuroStream Studio',
+        click: () => {
+          mainWindow?.show();
+        },
+      },
+      { type: 'separator' },
+      {
+        label: 'Выход',
+        click: () => {
+          isQuitting = true;
+          app.quit();
+        },
+      },
+    ])
+  );
+  tray.on('click', () => mainWindow?.show());
 }
 
 /**
@@ -71,6 +134,7 @@ async function bootstrap() {
 
   mainWindow = createMainWindow(serverInstance.port);
   ttsHostWindow = createTtsHostWindow(serverInstance.port);
+  createTray();
 }
 
 /**
@@ -97,6 +161,15 @@ function openTikTokLoginWindow() {
         nodeIntegration: false,
       },
     });
+
+    // По умолчанию Electron добавляет в User-Agent строку вида "Electron/xx.x.x", по которой
+    // TikTok (и многие другие сайты) распознают автоматизированный/нестандартный браузер и
+    // могут выдавать "Слишком много попыток. Повторите позже" уже на первой попытке входа.
+    // Подменяем User-Agent на обычный десктопный Chrome, чтобы окно входа выглядело для
+    // TikTok как самый обычный браузер — сам процесс входа при этом никак не автоматизируется.
+    const CHROME_UA =
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36';
+    loginWindow.webContents.setUserAgent(CHROME_UA);
 
     let settled = false;
     let pollTimer = null;

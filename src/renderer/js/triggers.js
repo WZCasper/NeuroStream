@@ -4,9 +4,9 @@ import { toast } from './toast.js';
 const EVENT_TYPE_LABELS = {
   gift: 'Донат (подарок)',
   chat_keyword: 'Ключевое слово в чате',
-  follow: 'Подписка на канал (follow)',
+  follow: 'Новый подписчик',
   share: 'Поделились трансляцией',
-  subscribe: 'Оформлена подписка (sub)',
+  subscribe: 'Платная подписка',
   like: 'Лайки',
 };
 
@@ -275,6 +275,7 @@ async function refreshList() {
         <td>${escapeHtml(summarizeConditions(t))}</td>
         <td>${t.actions.map((a) => ACTION_TYPE_LABELS[a.action_type] || a.action_type).join(' → ') || '—'}</td>
         <td class="row">
+          <button class="btn small" data-test-trigger title="Запустить действия триггера прямо сейчас, без реального события">Тест</button>
           <button class="btn small" data-edit>Изменить</button>
           <button class="btn small danger" data-delete>Удалить</button>
         </td>
@@ -288,6 +289,14 @@ async function refreshList() {
 
     tr.querySelector('[data-toggle-enabled]').addEventListener('change', async (e) => {
       await api.put(`/api/triggers/${id}`, { enabled: e.target.checked });
+    });
+    tr.querySelector('[data-test-trigger]').addEventListener('click', async () => {
+      try {
+        await api.post(`/api/triggers/${id}/test`);
+        toast(`Тестовый запуск «${trigger.name}» отправлен — смотрите в OBS/на озвучке`, 'success');
+      } catch (err) {
+        toast(err.message, 'error');
+      }
     });
     tr.querySelector('[data-edit]').addEventListener('click', () => openForm(trigger));
     tr.querySelector('[data-delete]').addEventListener('click', async () => {

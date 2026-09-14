@@ -177,6 +177,17 @@ function createApiRouter(ctx) {
     res.status(204).end();
   });
 
+  // Тестовый запуск триггера — выполняет цепочку действий с синтетическим событием,
+  // без проверки условий/cooldown и без необходимости реальной трансляции.
+  router.post('/triggers/:id/test', async (req, res) => {
+    try {
+      await triggerEngine.testTrigger(Number(req.params.id));
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
   // ============================== IoT-устройства ==============================
   router.get('/iot/devices', (req, res) => {
     res.json(iotService.listDevices());
@@ -210,10 +221,19 @@ function createApiRouter(ctx) {
   });
 
   // ============================== Медиатека ==============================
+  //
+  // Важно: браузер отправляет имена файлов в оригинальной кодировке (UTF-8), но multer/busboy
+  // по умолчанию декодирует их как latin1 (это давно известное поведение библиотеки, а не
+  // ошибка конкретного файла) — из-за этого русские (и вообще любые не-ASCII) имена файлов
+  // превращались в "иероглифы". Исправляем перекодировкой обратно в правильный UTF-8.
+  function fixOriginalFilenameEncoding(name) {
+    return Buffer.from(name, 'latin1').toString('utf8');
+  }
+
   const storage = multer.diskStorage({
     destination: (req, file, cb) => cb(null, mediaDir),
     filename: (req, file, cb) => {
-      const ext = path.extname(file.originalname).toLowerCase();
+      const ext = path.extname(fixOriginalFilenameEncoding(file.originalname)).toLowerCase();
       cb(null, `${crypto.randomUUID()}${ext}`);
     },
   });
@@ -221,7 +241,7 @@ function createApiRouter(ctx) {
     storage,
     limits: { fileSize: 80 * 1024 * 1024 }, // 80 МБ на файл
     fileFilter: (req, file, cb) => {
-      const ext = path.extname(file.originalname).toLowerCase();
+      const ext = path.extname(fixOriginalFilenameEncoding(file.originalname)).toLowerCase();
       if (!ALLOWED_MEDIA_EXT.has(ext)) {
         cb(new Error(`Неподдерживаемый тип файла: ${ext}`));
         return;
@@ -238,7 +258,7 @@ function createApiRouter(ctx) {
     if (!req.file) return res.status(400).json({ error: 'Файл не получен' });
     const item = mediaLibrary.register({
       filename: req.file.filename,
-      originalName: req.file.originalname,
+      originalName: fixOriginalFilenameEncoding(req.file.originalname),
       mimeType: req.file.mimetype,
       sizeBytes: req.file.size,
     });

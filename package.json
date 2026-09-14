@@ -39,6 +39,7 @@
     },
     "files": [
       "src/**/*",
+      "build/icon.png",
       "package.json",
       "!src/renderer/**/*.map"
     ],

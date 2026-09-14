@@ -55,12 +55,29 @@ async function showNext() {
   showing = true;
 
   const widget = item.config?.widgetId ? widgetsById.get(Number(item.config.widgetId)) : null;
-  const media = widget ? mediaById.get(widget.media_id) : item.config?.mediaId ? mediaById.get(Number(item.config.mediaId)) : null;
+  const primaryMedia = widget ? mediaById.get(widget.media_id) : item.config?.mediaId ? mediaById.get(Number(item.config.mediaId)) : null;
+  const secondaryMedia = widget?.secondary_media_id ? mediaById.get(widget.secondary_media_id) : null;
   const template = widget?.text_template || '{user} — {message}';
   const durationMs = widget?.duration_ms || 6000;
 
   customCssEl.textContent = widget?.custom_css || '';
-  mediaSlot.innerHTML = renderMediaTag(media);
+
+  // Основной и дополнительный медиафайлы виджета: если это картинка/видео — показываем визуально,
+  // если звук — просто проигрываем поверх (например, анимация + отдельный звуковой эффект).
+  const visualTags = [];
+  const audiosToPlay = [];
+  for (const media of [primaryMedia, secondaryMedia]) {
+    if (!media) continue;
+    if (media.kind === 'audio') audiosToPlay.push(media);
+    else visualTags.push(renderMediaTag(media));
+  }
+  mediaSlot.innerHTML = visualTags.join('');
+  const activeAudioElements = audiosToPlay.map((media) => {
+    const audio = new Audio(`/media/${media.filename}`);
+    audio.play().catch(() => {});
+    return audio;
+  });
+
   textEl.innerHTML = renderText(template, item.event || {});
 
   requestAnimationFrame(() => root.classList.add('visible'));
@@ -70,6 +87,7 @@ async function showNext() {
     setTimeout(() => {
       mediaSlot.innerHTML = '';
       textEl.textContent = '';
+      activeAudioElements.forEach((a) => a.pause());
       showing = false;
       showNext();
     }, 400);

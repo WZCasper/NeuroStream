@@ -95,12 +95,14 @@ function bindDropzone() {
 // ------------------------------------- Виджеты алертов -------------------------------------
 
 function populateWidgetMediaSelect() {
-  const select = document.getElementById('widget-media');
-  const current = select.value;
-  select.innerHTML =
-    '<option value="">— без медиафайла —</option>' +
-    mediaCache.map((m) => `<option value="${m.id}">${escapeHtml(m.original_name)}</option>`).join('');
-  if (current) select.value = current;
+  ['widget-media', 'widget-media-2'].forEach((id) => {
+    const select = document.getElementById(id);
+    const current = select.value;
+    select.innerHTML =
+      '<option value="">— без медиафайла —</option>' +
+      mediaCache.map((m) => `<option value="${m.id}">${escapeHtml(m.original_name)} (${m.kind})</option>`).join('');
+    if (current) select.value = current;
+  });
 }
 
 function widgetRowHtml(w) {
@@ -147,6 +149,7 @@ function openWidgetForm(widget = null) {
   document.getElementById('widget-name').value = widget?.name || '';
   populateWidgetMediaSelect();
   document.getElementById('widget-media').value = widget?.media_id || '';
+  document.getElementById('widget-media-2').value = widget?.secondary_media_id || '';
   document.getElementById('widget-duration').value = widget?.duration_ms || 6000;
   document.getElementById('widget-template').value = widget?.text_template || '{user} — {message}';
   document.getElementById('widget-css').value = widget?.custom_css || '';
@@ -162,6 +165,7 @@ async function saveWidget(e) {
   const payload = {
     name: document.getElementById('widget-name').value.trim(),
     mediaId: Number(document.getElementById('widget-media').value) || null,
+    secondaryMediaId: Number(document.getElementById('widget-media-2').value) || null,
     durationMs: Number(document.getElementById('widget-duration').value) || 6000,
     textTemplate: document.getElementById('widget-template').value,
     customCss: document.getElementById('widget-css').value,

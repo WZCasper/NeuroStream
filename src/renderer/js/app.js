@@ -1,6 +1,7 @@
 import { socket } from './socket.js';
 import { initTheme } from './theme.js';
 import { toast } from './toast.js';
+import { attachEmojiPickersIn } from './emoji.js';
 import { initDashboard } from './dashboard.js';
 import { initTriggers } from './triggers.js';
 import { initTts } from './tts.js';
@@ -81,6 +82,8 @@ async function bootstrap() {
   initIot();
   initMedia();
   initLogsSettings();
+
+  attachEmojiPickersIn(document);
 }
 
 document.addEventListener('DOMContentLoaded', bootstrap);

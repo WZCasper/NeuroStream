@@ -94,13 +94,14 @@ CREATE TABLE IF NOT EXISTS media_files (
 
 -- Виджеты алертов для OBS Browser Source.
 CREATE TABLE IF NOT EXISTS alert_widgets (
-  id            INTEGER PRIMARY KEY AUTOINCREMENT,
-  name          TEXT NOT NULL,
-  media_id      INTEGER REFERENCES media_files(id) ON DELETE SET NULL,
-  duration_ms   INTEGER NOT NULL DEFAULT 6000,
-  custom_css    TEXT DEFAULT '',
-  text_template TEXT DEFAULT '{user} — {message}',
-  created_at    TEXT DEFAULT CURRENT_TIMESTAMP
+  id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+  name               TEXT NOT NULL,
+  media_id           INTEGER REFERENCES media_files(id) ON DELETE SET NULL,
+  secondary_media_id INTEGER REFERENCES media_files(id) ON DELETE SET NULL, -- напр. звук поверх анимации/картинки
+  duration_ms        INTEGER NOT NULL DEFAULT 6000,
+  custom_css         TEXT DEFAULT '',
+  text_template      TEXT DEFAULT '{user} — {message}',
+  created_at         TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Журнал событий приложения (алерты, ошибки подключения, срабатывания триггеров и т.д.)

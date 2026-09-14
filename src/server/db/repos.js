@@ -149,21 +149,31 @@ function createRepos(db) {
     list() {
       return db.prepare('SELECT * FROM alert_widgets ORDER BY id ASC').all();
     },
-    create({ name, mediaId, durationMs, customCss, textTemplate }) {
+    create({ name, mediaId, secondaryMediaId, durationMs, customCss, textTemplate }) {
       const info = db
         .prepare(
-          'INSERT INTO alert_widgets (name, media_id, duration_ms, custom_css, text_template) VALUES (?,?,?,?,?)'
+          'INSERT INTO alert_widgets (name, media_id, secondary_media_id, duration_ms, custom_css, text_template) VALUES (?,?,?,?,?,?)'
         )
-        .run(name, mediaId || null, durationMs || 6000, customCss || '', textTemplate || '{user} — {message}');
+        .run(
+          name,
+          mediaId || null,
+          secondaryMediaId || null,
+          durationMs || 6000,
+          customCss || '',
+          textTemplate || '{user} — {message}'
+        );
       return db.prepare('SELECT * FROM alert_widgets WHERE id = ?').get(info.lastInsertRowid);
     },
     update(id, fields) {
       const current = db.prepare('SELECT * FROM alert_widgets WHERE id = ?').get(id);
       if (!current) return null;
       const merged = { ...current, ...fields };
-      db.prepare('UPDATE alert_widgets SET name=?, media_id=?, duration_ms=?, custom_css=?, text_template=? WHERE id=?').run(
+      db.prepare(
+        'UPDATE alert_widgets SET name=?, media_id=?, secondary_media_id=?, duration_ms=?, custom_css=?, text_template=? WHERE id=?'
+      ).run(
         merged.name,
         merged.mediaId ?? merged.media_id,
+        merged.secondaryMediaId ?? merged.secondary_media_id,
         merged.durationMs ?? merged.duration_ms,
         merged.customCss ?? merged.custom_css,
         merged.textTemplate ?? merged.text_template,

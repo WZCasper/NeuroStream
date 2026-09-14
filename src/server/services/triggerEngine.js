@@ -52,6 +52,25 @@ class TriggerEngine extends EventEmitter {
     this.eventBus.off('event', this._onEvent);
   }
 
+  /**
+   * Запускает цепочку действий триггера "как есть", без проверки условий и cooldown —
+   * для кнопки «Тест» в интерфейсе, чтобы можно было посмотреть, как сработает триггер,
+   * не дожидаясь реального события на трансляции (и не обязательно даже подключаясь к ней).
+   * @param {number} triggerId
+   */
+  async testTrigger(triggerId) {
+    const trigger = this.db.prepare('SELECT * FROM triggers WHERE id = ?').get(triggerId);
+    if (!trigger) throw new Error(`Триггер #${triggerId} не найден`);
+    trigger.actions = this.db
+      .prepare('SELECT * FROM trigger_actions WHERE trigger_id = ? ORDER BY order_index ASC')
+      .all(triggerId)
+      .map((a) => ({ ...a, config: safeParseJSON(a.config_json, {}) }));
+
+    const testEvent = buildSyntheticEvent(trigger);
+    this.logger.info('trigger', `Тестовый запуск триггера "${trigger.name}"`);
+    await this._runActions(trigger, testEvent);
+  }
+
   /** Перечитывает триггеры и их действия из базы данных (вызывать после любого изменения через API). */
   reload() {
     const triggerRows = this.db.prepare('SELECT * FROM triggers WHERE enabled = 1 ORDER BY order_index ASC, id ASC').all();
@@ -240,6 +259,32 @@ function renderTemplate(template, event) {
     coins: event.diamondCount || 0,
   };
   return String(template || '{user}: {text}').replace(/\{(\w+)\}/g, (m, key) => (key in vars ? String(vars[key]) : m));
+}
+
+/**
+ * Строит правдоподобное тестовое событие для кнопки «Тест» триггера — чтобы шаблоны
+ * ({user}, {gift}, {text}…) отрендерились осмысленно, даже когда реального события ещё не было.
+ */
+function buildSyntheticEvent(trigger) {
+  const source = trigger.source === 'any' ? 'tiktok' : trigger.source;
+  const base = {
+    id: `test-${Date.now()}`,
+    source,
+    platform: source,
+    author: { id: 'test', name: 'Тестовый Зритель' },
+    timestamp: Date.now(),
+    raw: { test: true },
+  };
+  switch (trigger.event_type) {
+    case 'gift':
+      return { ...base, type: 'gift', giftName: 'Rose', giftId: 5655, diamondCount: 100, repeatCount: 1, repeatEnd: true };
+    case 'chat_keyword':
+      return { ...base, type: 'chat', text: 'Это тестовое сообщение для проверки триггера' };
+    case 'like':
+      return { ...base, type: 'like', likeCount: 50 };
+    default:
+      return { ...base, type: trigger.event_type };
+  }
 }
 
 function safeParseJSON(str, fallback) {

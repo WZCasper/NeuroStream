@@ -45,6 +45,14 @@
         <div class="page-header">
           <div><h1>Главная</h1><p>Подключения, ресурсы приложения и живая лента событий трансляции</p></div>
         </div>
+        <div class="tab-description">
+          Здесь вы подключаете источники трансляции — <strong>TikTok LIVE напрямую</strong> и/или
+          <strong>AxelChat</strong> (через него можно получать сообщения сразу с YouTube, Twitch, Kick,
+          VK Видео и других платформ). Ниже показывается, сколько ресурсов компьютера использует
+          программа, и в реальном времени видно все сообщения/подарки/подписки, которые приходят
+          с подключённых платформ.
+        </div>
+
 
         <div class="grid-2">
           <div class="card">
@@ -140,11 +148,19 @@
           <div><h1>Триггеры</h1><p>Правила «Событие → набор действий»</p></div>
           <button class="btn primary" id="btn-new-trigger">+ Новый триггер</button>
         </div>
+        <div class="tab-description">
+          Триггер — это правило вида «когда происходит <strong>такое-то событие</strong> на трансляции
+          (донат, подписка, определённое слово в чате…) — сделать <strong>такие-то действия</strong>»
+          (показать алерт, проиграть звук, озвучить, отправить запрос на IoT-устройство или ответить
+          в чат текстом). Можно связать в одном триггере сразу несколько действий подряд — они
+          выполнятся по порядку.
+        </div>
+
 
         <form class="card" id="trigger-form" style="display:none">
           <h3 class="card-title" id="trigger-form-title">Новый триггер</h3>
           <div class="grid-2">
-            <div class="field"><label>Название</label><input type="text" id="trigger-name" required></div>
+            <div class="field"><label>Название</label><input type="text" id="trigger-name" data-emoji="1" required></div>
             <div class="field"><label>Источник</label>
               <select id="trigger-source">
                 <option value="tiktok">TikTok</option>
@@ -157,9 +173,9 @@
               <select id="trigger-event-type">
                 <option value="gift">Донат (подарок)</option>
                 <option value="chat_keyword">Ключевое слово в чате</option>
-                <option value="follow">Подписка (follow)</option>
+                <option value="follow">Новый подписчик</option>
                 <option value="share">Поделились трансляцией</option>
-                <option value="subscribe">Оформлена подписка (sub)</option>
+                <option value="subscribe">Платная подписка</option>
                 <option value="like">Лайки</option>
               </select></div>
             <div class="field"><label>Задержка между срабатываниями (мс)</label>
@@ -191,6 +207,12 @@
         <div class="page-header">
           <div><h1>Озвучка и чат</h1><p>Независимые голосовые пресеты для TikTok-чата и AxelChat</p></div>
         </div>
+        <div class="tab-description">
+          Здесь настраивается озвучка чата/донатов голосом (Text-to-Speech): отдельно для TikTok и
+          отдельно для AxelChat (то есть для всех остальных подключённых через него платформ) — у
+          каждого источника свой голос, скорость и громкость. Ниже — фильтр, который автоматически
+          заменяет нежелательные слова перед тем, как их озвучить.
+        </div>
 
         <div class="grid-2">
           <div class="card" data-preset-panel="tiktok">
@@ -203,12 +225,12 @@
             <div class="grid-2">
               <label class="checkbox-row"><input type="checkbox" data-f="read_chat"> Читать чат</label>
               <label class="checkbox-row"><input type="checkbox" data-f="read_gifts"> Читать подарки</label>
-              <label class="checkbox-row"><input type="checkbox" data-f="read_follows"> Читать подписки (follow)</label>
-              <label class="checkbox-row"><input type="checkbox" data-f="read_subscribes"> Читать sub</label>
+              <label class="checkbox-row"><input type="checkbox" data-f="read_follows"> Озвучивать новых подписчиков</label>
+              <label class="checkbox-row"><input type="checkbox" data-f="read_subscribes"> Озвучивать платные подписки</label>
             </div>
             <div class="field"><label>Озвучивать подарки от N монет</label><input type="number" min="0" data-f="min_gift_coins"></div>
-            <div class="field"><label>Шаблон чата</label><textarea data-f="chat_template" rows="2"></textarea></div>
-            <div class="field"><label>Шаблон подарка</label><textarea data-f="gift_template" rows="2"></textarea></div>
+            <div class="field"><label>Шаблон чата</label><textarea data-f="chat_template" data-emoji="1" rows="2"></textarea></div>
+            <div class="field"><label>Шаблон подарка</label><textarea data-f="gift_template" data-emoji="1" rows="2"></textarea></div>
             <div class="field"><label>Тестовый текст</label><input type="text" data-f="test_text" placeholder="Проверка голоса"></div>
             <div class="row">
               <button type="button" class="btn" data-action="test">▶ Проверить голос</button>
@@ -226,12 +248,12 @@
             <div class="grid-2">
               <label class="checkbox-row"><input type="checkbox" data-f="read_chat"> Читать чат</label>
               <label class="checkbox-row"><input type="checkbox" data-f="read_gifts"> Читать подарки</label>
-              <label class="checkbox-row"><input type="checkbox" data-f="read_follows"> Читать подписки (follow)</label>
-              <label class="checkbox-row"><input type="checkbox" data-f="read_subscribes"> Читать sub</label>
+              <label class="checkbox-row"><input type="checkbox" data-f="read_follows"> Озвучивать новых подписчиков</label>
+              <label class="checkbox-row"><input type="checkbox" data-f="read_subscribes"> Озвучивать платные подписки</label>
             </div>
             <div class="field"><label>Озвучивать подарки от N монет</label><input type="number" min="0" data-f="min_gift_coins"></div>
-            <div class="field"><label>Шаблон чата</label><textarea data-f="chat_template" rows="2"></textarea></div>
-            <div class="field"><label>Шаблон подарка</label><textarea data-f="gift_template" rows="2"></textarea></div>
+            <div class="field"><label>Шаблон чата</label><textarea data-f="chat_template" data-emoji="1" rows="2"></textarea></div>
+            <div class="field"><label>Шаблон подарка</label><textarea data-f="gift_template" data-emoji="1" rows="2"></textarea></div>
             <div class="field"><label>Тестовый текст</label><input type="text" data-f="test_text" placeholder="Проверка голоса"></div>
             <div class="row">
               <button type="button" class="btn" data-action="test">▶ Проверить голос</button>
@@ -270,6 +292,19 @@
           <div><h1>IoT-устройства</h1><p>Устройства (например ESP32), управляемые по HTTP, и проверка связи (health ping)</p></div>
           <button class="btn primary" id="btn-new-iot-device">+ Новое устройство</button>
         </div>
+        <div class="tab-description">
+          <strong>Что это такое:</strong> IoT-устройства — это небольшие физические электронные
+          устройства (например, плата ESP32 или похожий контроллер), подключённые к той же сети,
+          что и компьютер, и умеющие принимать команды через интернет/локальную сеть.
+          <strong>Для чего нужно:</strong> чтобы события на трансляции превращались в реальные
+          физические эффекты в комнате у стримера — например, при донате мигает лампа, крутится
+          вентилятор, срабатывает конфетти-пушка, включается сигнальная лампа и т.п. Здесь вы
+          регистрируете такие устройства (указываете их адрес в сети), а в конструкторе триггеров
+          выбираете действие «HTTP-запрос / IoT», чтобы отправлять им команду при нужном событии.
+          Индикатор 🟢/🔴 показывает, отвечает ли устройство прямо сейчас (проверяется автоматически
+          через равные промежутки времени). Если вы не используете такие устройства — эту вкладку
+          можно просто не трогать, на остальную часть программы она не влияет.
+        </div>
 
         <form class="card" id="iot-form" style="display:none">
           <h3 class="card-title" id="iot-form-title">Новое устройство</h3>
@@ -302,6 +337,13 @@
         <div class="page-header">
           <div><h1>Медиатека</h1><p>Файлы для алертов (.webm, .gif, .mp3, .wav, изображения) и виджеты OBS Browser Source</p></div>
         </div>
+        <div class="tab-description">
+          Сюда загружаются файлы, которые будут показываться/проигрываться как алерты во время
+          трансляции: видео/gif/картинки — для визуального оформления, mp3/wav — для звуковых
+          эффектов. Ниже, в разделе «Виджеты алертов», вы объединяете медиафайл с текстом и
+          оформлением в готовый виджет — именно виджеты потом выбираются как действие «Визуальный
+          алерт» в конструкторе триггеров и показываются в OBS.
+        </div>
 
         <div class="card">
           <div class="dropzone" id="media-dropzone">
@@ -319,15 +361,29 @@
 
         <form class="card" id="widget-form" style="display:none">
           <h3 class="card-title" id="widget-form-title">Новый виджет</h3>
+          <div class="field"><label>Название</label><input type="text" id="widget-name" data-emoji="1" required></div>
           <div class="grid-2">
-            <div class="field"><label>Название</label><input type="text" id="widget-name" required></div>
-            <div class="field"><label>Медиафайл</label><select id="widget-media"></select></div>
+            <div class="field"><label>Основной медиафайл (картинка/видео/gif)</label><select id="widget-media"></select></div>
+            <div class="field"><label>Дополнительный медиафайл (необязательно — например, звук)</label><select id="widget-media-2"></select></div>
           </div>
           <div class="grid-2">
             <div class="field"><label>Длительность показа (мс)</label><input type="number" id="widget-duration" value="6000" min="500"></div>
-            <div class="field"><label>Текстовый шаблон</label><input type="text" id="widget-template" value="{user} — {message}"></div>
+            <div class="field"><label>Текстовый шаблон</label><input type="text" id="widget-template" data-emoji="1" value="{user} — {message}"></div>
           </div>
-          <div class="field"><label>Свой CSS (необязательно)</label><textarea id="widget-css" rows="4" placeholder=".alert-text { font-size: 32px; }"></textarea></div>
+          <div class="field"><label>Свой CSS (необязательно)
+              <span class="info-tooltip" tabindex="0">
+                <span class="info-icon">?</span>
+                <span class="info-popup">
+                  Здесь можно задать собственные стили оформления для этого алерта в OBS —
+                  например, изменить размер/цвет/шрифт текста, анимацию появления и т.д.
+                  Пишется обычным CSS. Доступные классы: <code>.alert-media</code> (картинка/видео)
+                  и <code>.alert-text</code> (текст сообщения). Пример:<br>
+                  <code>.alert-text { font-size: 40px; color: #ffdd00; }</code><br>
+                  Если не разбираетесь в CSS — просто оставьте поле пустым, алерт будет выглядеть
+                  по умолчанию.
+                </span>
+              </span>
+            </label><textarea id="widget-css" rows="4" placeholder=".alert-text { font-size: 32px; }"></textarea></div>
           <div class="row" style="margin-top:10px">
             <button type="submit" class="btn primary">Сохранить</button>
             <button type="button" class="btn ghost" id="btn-cancel-widget-form">Отмена</button>
@@ -348,6 +404,12 @@
       <section class="tab-panel" id="tab-logs">
         <div class="page-header">
           <div><h1>Журнал и настройки</h1><p>Оформление приложения и журнал событий</p></div>
+        </div>
+        <div class="tab-description">
+          Здесь можно переключить цветовую тему оформления (применяется мгновенно) и посмотреть
+          журнал работы программы — все подключения, ошибки, сработавшие триггеры и системные
+          события с точным временем. Полезно, если что-то работает не так, как ожидалось: сначала
+          загляните сюда, чтобы увидеть точную причину.
         </div>
 
         <div class="card">
