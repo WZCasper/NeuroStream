@@ -116,10 +116,17 @@
             <span class="badge off" id="overlay-connection-badge">Не подключено</span>
             <span class="hint" id="overlay-connection-detail">Оверлей ещё не открыт ни в одной программе</span>
           </div>
-          <p class="hint" style="margin-top:8px">Адрес для источника «Браузер» в OBS или Link Source в TikTok LIVE Studio:
-            <code id="overlay-url-hint-2"></code>. Если здесь написано «Не подключено», а вы уверены, что источник
-            добавлен — скорее всего, программа была перезапущена и слушает другой порт: обновите (Refresh) источник
-            в OBS/TikTok LIVE Studio или пересоздайте его с адресом выше.</p>
+          <div class="field" style="margin-top:10px">
+            <label>Адрес источника для OBS («Браузер») или TikTok LIVE Studio (Link Source)</label>
+            <div class="row" style="gap:8px">
+              <input type="text" id="overlay-url-field" readonly style="flex:1; font-family: var(--font-mono);">
+              <button type="button" class="btn" id="btn-copy-overlay-url">📋 Копировать</button>
+              <button type="button" class="btn" id="btn-open-overlay-url">↗ Открыть</button>
+            </div>
+          </div>
+          <p class="hint" style="margin-top:8px">Если здесь написано «Не подключено», а вы уверены, что источник
+            добавлен — скорее всего, программа была перезапущена и теперь слушает другой порт: нажмите «Копировать»
+            и вставьте новый адрес в настройки источника в OBS/TikTok LIVE Studio (или пересоздайте источник).</p>
         </div>
 
         <div class="card">

@@ -237,8 +237,25 @@ function escapeHtml(str) {
 }
 
 function bindOverlayStatus() {
-  const overlayHint = document.getElementById('overlay-url-hint-2');
-  if (overlayHint) overlayHint.textContent = `${window.location.origin}/overlay.html`;
+  const urlField = document.getElementById('overlay-url-field');
+  const overlayUrl = `${window.location.origin}/overlay.html`;
+  if (urlField) urlField.value = overlayUrl;
+
+  document.getElementById('btn-copy-overlay-url')?.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(overlayUrl);
+      toast('Адрес скопирован — вставьте его в источник OBS/TikTok LIVE Studio', 'success');
+    } catch {
+      urlField.select();
+      document.execCommand('copy');
+      toast('Адрес скопирован', 'success');
+    }
+  });
+
+  document.getElementById('btn-open-overlay-url')?.addEventListener('click', () => {
+    if (window.nss?.openExternal) window.nss.openExternal(overlayUrl);
+    else window.open(overlayUrl, '_blank');
+  });
 
   socket.on('overlay:connectionCount', (count) => {
     const badge = document.getElementById('overlay-connection-badge');
