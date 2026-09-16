@@ -1,7 +1,8 @@
 'use strict';
 
 const path = require('node:path');
-const { app, BrowserWindow, ipcMain, shell, session, Tray, Menu, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, session, Tray, Menu, dialog, safeStorage, Notification } = require('electron');
+const { autoUpdater } = require('electron-updater');
 const { createServer } = require('../server/index');
 
 /** @type {import('electron').BrowserWindow|null} */
@@ -92,6 +93,25 @@ function createTray() {
           mainWindow?.show();
         },
       },
+      {
+        label: 'Проверить обновления',
+        click: () => {
+          if (!app.isPackaged) {
+            dialog.showMessageBox(mainWindow || undefined, {
+              type: 'info',
+              message: 'Проверка обновлений доступна только в собранной программе, не в режиме разработки.',
+            });
+            return;
+          }
+          autoUpdater.checkForUpdates().catch((err) => {
+            dialog.showMessageBox(mainWindow || undefined, {
+              type: 'error',
+              message: 'Не удалось проверить обновления',
+              detail: err?.message || String(err),
+            });
+          });
+        },
+      },
       { type: 'separator' },
       {
         label: 'Выход',
@@ -126,15 +146,101 @@ function createTtsHostWindow(port) {
   return win;
 }
 
+/**
+ * Автообновление через GitHub Releases (electron-builder публикует туда latest.yml
+ * и установщик при каждой сборке в CI). Загружает обновление в фоне и, когда оно готово,
+ * спрашивает пользователя — установить сейчас или при следующем закрытии программы.
+ * В режиме разработки (npm run dev) не проверяет — только в собранном .exe.
+ */
+function setupAutoUpdater() {
+  if (!app.isPackaged) return;
+
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = false;
+
+  autoUpdater.on('error', (err) => {
+    console.error('[autoUpdater]', err?.message || err);
+  });
+
+  autoUpdater.on('update-downloaded', async (info) => {
+    const result = await dialog.showMessageBox(mainWindow || undefined, {
+      type: 'info',
+      title: 'Доступно обновление NeuroStream Studio',
+      message: `Обновление до версии ${info.version} загружено и готово к установке.`,
+      detail: 'Установить сейчас? Программа перезапустится (это займёт несколько секунд).',
+      buttons: ['Установить сейчас', 'Позже (при следующем закрытии)'],
+      defaultId: 0,
+      cancelId: 1,
+      noLink: true,
+    });
+    if (result.response === 0) {
+      isQuitting = true;
+      autoUpdater.quitAndInstall();
+    } else {
+      autoUpdater.autoInstallOnAppQuit = true;
+    }
+  });
+
+  // Небольшая задержка, чтобы проверка обновлений не задерживала первый запуск программы.
+  setTimeout(() => {
+    autoUpdater.checkForUpdates().catch((err) => {
+      console.error('[autoUpdater] проверка обновлений не удалась:', err?.message || err);
+    });
+  }, 5000);
+}
+
+/**
+ * Системные уведомления Windows о критических сбоях подключения. Нужны потому, что во
+ * время эфира стример обычно смотрит не в окно программы, а в чат/на камеру — и может
+ * не заметить, что связь с TikTok/AxelChat отвалилась.
+ *
+ * Уведомляем только о переходе "было подключено → сломалось" и о восстановлении связи,
+ * чтобы не спамить при каждой промежуточной попытке переподключения.
+ */
+function setupConnectionNotifications(server) {
+  if (!Notification.isSupported()) return;
+
+  const iconPath = path.join(__dirname, '..', '..', 'build', 'icon.png');
+  const wasConnected = { tiktok: false, axelchat: false };
+
+  const notify = (title, body) => {
+    new Notification({ title, body, icon: iconPath }).show();
+  };
+
+  const watch = (connector, label, key) => {
+    connector.on('status', (state) => {
+      if (state.status === 'connected') {
+        if (!wasConnected[key]) {
+          wasConnected[key] = true;
+          // О восстановлении сообщаем только если до этого уже был обрыв (не при первом подключении).
+          if (state.reconnectCount > 0) notify('NeuroStream Studio', `${label}: связь восстановлена`);
+        }
+        return;
+      }
+      const isFailure = state.status === 'error' || state.status === 'reconnecting';
+      if (isFailure && wasConnected[key]) {
+        wasConnected[key] = false;
+        notify('NeuroStream Studio — обрыв связи', `${label}: ${state.message || 'соединение потеряно, идёт переподключение'}`);
+      }
+    });
+  };
+
+  watch(server.services.tiktokConnector, 'TikTok LIVE', 'tiktok');
+  watch(server.services.axelChatConnector, 'AxelChat', 'axelchat');
+}
+
 async function bootstrap() {
   serverInstance = await createServer({
     userDataDir: app.getPath('userData'),
     electronApp: app,
+    safeStorage,
   });
 
   mainWindow = createMainWindow(serverInstance.port);
   ttsHostWindow = createTtsHostWindow(serverInstance.port);
   createTray();
+  setupAutoUpdater();
+  setupConnectionNotifications(serverInstance);
 }
 
 /**

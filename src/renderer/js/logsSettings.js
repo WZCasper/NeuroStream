@@ -49,6 +49,47 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+function bindBackup() {
+  document.getElementById('btn-export-settings').addEventListener('click', async () => {
+    try {
+      const data = await api.get('/api/export');
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const stamp = new Date().toISOString().slice(0, 10);
+      a.href = url;
+      a.download = `neurostream-studio-backup-${stamp}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast('Резервная копия сохранена', 'success');
+    } catch (err) {
+      toast(`Не удалось экспортировать: ${err.message}`, 'error');
+    }
+  });
+
+  const fileInput = document.getElementById('import-settings-file');
+  document.getElementById('btn-import-settings').addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', async () => {
+    const file = fileInput.files[0];
+    fileInput.value = '';
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      if (!window.confirm('Импортировать настройки из файла? Существующие триггеры/виджеты/устройства не будут удалены — новые добавятся рядом.')) return;
+      const result = await api.post('/api/import', data);
+      const s = result.summary;
+      toast(
+        `Импортировано: триггеров — ${s.triggers}, виджетов — ${s.alertWidgets}, IoT — ${s.iotDevices}, правил фильтра — ${s.profanityRules}`,
+        'success'
+      );
+    } catch (err) {
+      toast(`Не удалось импортировать: ${err.message}`, 'error');
+    }
+  });
+}
+
 export function initLogsSettings() {
   bindLogStream();
+  bindBackup();
 }

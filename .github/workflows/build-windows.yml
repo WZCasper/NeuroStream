@@ -26,21 +26,36 @@ jobs:
         continue-on-error: true
         run: npm install 2>&1 | tee install.log
 
-      - name: Build Windows installer (electron-builder)
-        id: build
+      - name: Run smoke tests
+        id: test
         if: steps.install.outcome == 'success'
         shell: bash
         continue-on-error: true
-        run: npm run dist 2>&1 | tee build.log
+        run: npm test 2>&1 | tee test.log
 
-      - name: Locate installer
-        id: find_installer
-        if: steps.build.outcome == 'success'
+      - name: Bump version for this build (needed for auto-update to detect new releases)
+        id: bump_version
+        if: steps.test.outcome == 'success'
         shell: bash
         run: |
-          installer=$(ls release/*.exe | head -n 1)
-          echo "path=$installer" >> "$GITHUB_OUTPUT"
-          echo "name=$(basename "$installer")" >> "$GITHUB_OUTPUT"
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            const base = pkg.version.split('.').slice(0, 2).join('.');
+            pkg.version = base + '.${{ github.run_number }}';
+            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+            console.log('Версия сборки:', pkg.version);
+          "
+          echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Build and publish Windows installer (electron-builder)
+        id: build
+        if: steps.test.outcome == 'success'
+        shell: bash
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx electron-builder --win nsis --publish always 2>&1 | tee build.log
 
       - name: Upload build artifact
         if: steps.build.outcome == 'success'
@@ -50,20 +65,8 @@ jobs:
           path: release/*.exe
           retention-days: 30
 
-      - name: Create GitHub Release with installer
-        if: steps.build.outcome == 'success'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        shell: bash
-        run: |
-          tag="build-${{ github.run_number }}"
-          gh release create "$tag" "${{ steps.find_installer.outputs.path }}" \
-            --title "NeuroStream Studio — сборка #${{ github.run_number }}" \
-            --notes "Автоматическая сборка Windows-установщика из коммита ${{ github.sha }}." \
-            --repo "${{ github.repository }}"
-
       - name: Publish diagnostic logs on failure
-        if: steps.install.outcome == 'failure' || steps.build.outcome == 'failure'
+        if: steps.install.outcome == 'failure' || steps.test.outcome == 'failure' || steps.build.outcome == 'failure'
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -73,12 +76,13 @@ jobs:
           git checkout -B ci-logs
           mkdir -p ci-logs
           cp install.log ci-logs/install-latest.log 2>/dev/null || echo "(no install.log)" > ci-logs/install-latest.log
+          cp test.log ci-logs/test-latest.log 2>/dev/null || echo "(no test.log)" > ci-logs/test-latest.log
           cp build.log ci-logs/build-latest.log 2>/dev/null || echo "(no build.log)" > ci-logs/build-latest.log
           echo "run_number=${{ github.run_number }}" > ci-logs/meta.txt
           git add ci-logs
           git commit -m "CI diagnostic logs (run #${{ github.run_number }})" --allow-empty
           git push -f origin ci-logs
 
-      - name: Fail job if install or build failed
-        if: steps.install.outcome == 'failure' || steps.build.outcome == 'failure'
+      - name: Fail job if any step failed
+        if: steps.install.outcome == 'failure' || steps.test.outcome == 'failure' || steps.build.outcome == 'failure'
         run: exit 1

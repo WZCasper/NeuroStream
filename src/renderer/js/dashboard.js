@@ -101,15 +101,30 @@ function bindTikTokForm() {
     }
   });
 
+  document.getElementById('btn-tiktok-reconnect').addEventListener('click', async () => {
+    try {
+      await api.post('/api/tiktok/reconnect');
+      toast('Переподключение к TikTok запущено', 'info');
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  });
+
   socket.on('tiktok:status', (state) => {
     const el = document.getElementById('tiktok-status-detail');
     const parts = [];
     if (state.message) parts.push(state.message);
     if (state.status === 'connected') {
       parts.push(state.chatReplyAvailable ? '💬 Ответ в чат доступен' : 'ℹ️ Ответ в чат недоступен — не указаны сессионные cookie');
+      if (state.connectedSince) parts.push(`На связи с ${formatTimeShort(state.connectedSince)}`);
     }
+    if (state.reconnectCount > 0) parts.push(`переподключений за сессию: ${state.reconnectCount}`);
     el.textContent = parts.join(' · ');
   });
+}
+
+function formatTimeShort(iso) {
+  return new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
 }
 
 function bindAxelChatForm() {
@@ -132,9 +147,22 @@ function bindAxelChatForm() {
     toast('AxelChat отключён', 'info');
   });
 
+  document.getElementById('btn-axelchat-reconnect').addEventListener('click', async () => {
+    try {
+      await api.post('/api/axelchat/reconnect');
+      toast('Переподключение к AxelChat запущено', 'info');
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  });
+
   socket.on('axelchat:status', (state) => {
     const el = document.getElementById('axelchat-status-detail');
-    el.textContent = state.message || '';
+    const parts = [];
+    if (state.message) parts.push(state.message);
+    if (state.status === 'connected' && state.connectedSince) parts.push(`На связи с ${formatTimeShort(state.connectedSince)}`);
+    if (state.reconnectCount > 0) parts.push(`переподключений за сессию: ${state.reconnectCount}`);
+    el.textContent = parts.join(' · ');
     if (state.states) renderPlatformStates(state.states);
   });
 }

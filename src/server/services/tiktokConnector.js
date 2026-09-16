@@ -59,6 +59,8 @@ class TikTokConnectorService extends EventEmitter {
     this._reconnectAttempt = 0;
     this._reconnectTimer = null;
     this.lastErrorMessage = null; // человекочитаемая причина последнего статуса — показывается в UI
+    this.connectedSince = null; // время последнего успешного подключения — для отображения "давно ли на связи"
+    this.reconnectCountThisSession = 0; // сколько раз переподключались с момента запуска программы — индикатор качества связи
   }
 
   getState() {
@@ -69,7 +71,27 @@ class TikTokConnectorService extends EventEmitter {
       roomId: this.roomId,
       viewerCount: this.viewerCount,
       chatReplyAvailable: this.hasAuthenticatedSession(),
+      connectedSince: this.connectedSince,
+      reconnectCount: this.reconnectCountThisSession,
     };
+  }
+
+  /** Принудительное переподключение по кнопке в интерфейсе — не дожидаясь автоматического таймера. */
+  async reconnectNow() {
+    if (!this.uniqueId) throw new Error('Сначала укажите @uniqueId и подключитесь хотя бы раз');
+    if (this._reconnectTimer) {
+      clearTimeout(this._reconnectTimer);
+      this._reconnectTimer = null;
+    }
+    if (this.connection) {
+      try {
+        this.connection.disconnect();
+      } catch {
+        /* уже могло быть отключено */
+      }
+    }
+    this._reconnectAttempt = 0;
+    await this._connectOnce();
   }
 
   _setStatus(status, extra = {}) {
@@ -91,6 +113,7 @@ class TikTokConnectorService extends EventEmitter {
     this.sessionId = options.sessionId || null;
     this.ttTargetIdc = options.ttTargetIdc || null;
     this._reconnectAttempt = 0;
+    this.reconnectCountThisSession = 0;
     await this._connectOnce();
   }
 
@@ -156,6 +179,7 @@ class TikTokConnectorService extends EventEmitter {
       }
     }
     this._setStatus('stopped', { message: null });
+    this.connectedSince = null;
   }
 
   async _connectOnce() {
@@ -194,6 +218,7 @@ class TikTokConnectorService extends EventEmitter {
       const state = await this.connection.connect();
       this.roomId = state.roomId || null;
       this._reconnectAttempt = 0;
+      this.connectedSince = new Date().toISOString();
       this._setStatus('connected');
       this.logger.info('tiktok', `Подключено к трансляции @${this.uniqueId}`, {
         roomId: this.roomId,
@@ -242,6 +267,8 @@ class TikTokConnectorService extends EventEmitter {
   _scheduleReconnect() {
     if (this._stopped) return;
     this._reconnectAttempt += 1;
+    this.reconnectCountThisSession += 1;
+    this.connectedSince = null;
     const delay = Math.min(
       MIN_RECONNECT_DELAY_MS * 2 ** (this._reconnectAttempt - 1),
       MAX_RECONNECT_DELAY_MS

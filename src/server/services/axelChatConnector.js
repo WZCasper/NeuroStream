@@ -58,6 +58,8 @@ class AxelChatConnectorService extends EventEmitter {
     this._seenMessageIds = new Set(); // защита от повторной публикации отредактированных сообщений
     this.lastStates = null; // последние данные STATES_CHANGED (сервисы + суммарное число зрителей)
     this.lastErrorMessage = null; // человекочитаемая причина последней ошибки/статуса, для отображения в UI
+    this.connectedSince = null;
+    this.reconnectCountThisSession = 0;
   }
 
   getState() {
@@ -67,6 +69,8 @@ class AxelChatConnectorService extends EventEmitter {
       port: this.port,
       message: this.lastErrorMessage,
       states: this.lastStates,
+      connectedSince: this.connectedSince,
+      reconnectCount: this.reconnectCountThisSession,
     };
   }
 
@@ -85,6 +89,24 @@ class AxelChatConnectorService extends EventEmitter {
     this.host = options.host || DEFAULT_HOST;
     this.port = options.port || DEFAULT_PORT;
     this._reconnectAttempt = 0;
+    this.reconnectCountThisSession = 0;
+    this._connect();
+  }
+
+  /** Принудительное переподключение по кнопке в интерфейсе. */
+  reconnectNow() {
+    if (this._reconnectTimer) {
+      clearTimeout(this._reconnectTimer);
+      this._reconnectTimer = null;
+    }
+    if (this.ws) {
+      try {
+        this.ws.close();
+      } catch {
+        /* уже могло быть закрыто */
+      }
+    }
+    this._reconnectAttempt = 0;
     this._connect();
   }
 
@@ -101,6 +123,7 @@ class AxelChatConnectorService extends EventEmitter {
         // сокет уже мог быть закрыт
       }
     }
+    this.connectedSince = null;
     this._setStatus('stopped', { message: null });
   }
 
@@ -120,6 +143,7 @@ class AxelChatConnectorService extends EventEmitter {
 
     socket.on('open', () => {
       this._reconnectAttempt = 0;
+      this.connectedSince = new Date().toISOString();
       this._setStatus('connected');
       this.logger.info('axelchat', `Подключено к AxelChat (${url})`);
       this._resetAliveWatchdog();
@@ -174,6 +198,8 @@ class AxelChatConnectorService extends EventEmitter {
   _scheduleReconnect() {
     if (this._stopped) return;
     this._reconnectAttempt += 1;
+    this.reconnectCountThisSession += 1;
+    this.connectedSince = null;
     const delay = Math.min(
       MIN_RECONNECT_DELAY_MS * 2 ** (this._reconnectAttempt - 1),
       MAX_RECONNECT_DELAY_MS

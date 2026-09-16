@@ -89,6 +89,16 @@ function createApiRouter(ctx) {
     }
   });
 
+  // Принудительное переподключение по кнопке — не дожидаясь автоматического таймера.
+  router.post('/tiktok/reconnect', async (req, res) => {
+    try {
+      await tiktokConnector.reconnectNow();
+      res.json(tiktokConnector.getState());
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
   // ============================== AxelChat ==============================
   router.get('/axelchat/status', (req, res) => {
     res.json(axelChatConnector.getState());
@@ -106,6 +116,11 @@ function createApiRouter(ctx) {
   router.post('/axelchat/disconnect', (req, res) => {
     settings.set('axelchatAutoConnect', '0');
     axelChatConnector.stop();
+    res.json(axelChatConnector.getState());
+  });
+
+  router.post('/axelchat/reconnect', (req, res) => {
+    axelChatConnector.reconnectNow();
     res.json(axelChatConnector.getState());
   });
 
@@ -326,7 +341,128 @@ function createApiRouter(ctx) {
     res.status(204).end();
   });
 
+  // ============================== Экспорт / импорт настроек ==============================
+  // Резервная копия конфигурации (триггеры, виджеты, пресеты TTS, IoT-устройства, фильтр слов,
+  // общие настройки) в один JSON-файл. Сессионные cookie TikTok и ключ подписи сознательно
+  // НЕ экспортируются — это чувствительные данные уровня пароля, их нельзя класть в файл,
+  // который может быть скопирован/переслан. Медиафайлы (сами видео/gif/mp3) тоже не входят
+  // в экспорт — только ссылки на них у виджетов; при переносе на другой компьютер их нужно
+  // будет загрузить заново в Медиатеку.
+  const NON_EXPORTABLE_SETTINGS = new Set(['tiktokSessionId', 'tiktokTtTargetIdc', 'tiktokSignApiKey']);
+
+  router.get('/export', (req, res) => {
+    const allSettings = settings.all();
+    const exportableSettings = {};
+    for (const [key, value] of Object.entries(allSettings)) {
+      if (!NON_EXPORTABLE_SETTINGS.has(key)) exportableSettings[key] = value;
+    }
+
+    res.json({
+      exportedAt: new Date().toISOString(),
+      formatVersion: 1,
+      settings: exportableSettings,
+      ttsPresets: repos.ttsPresets.getAll(),
+      profanityRules: repos.profanityRules.list(),
+      triggers: repos.triggers.list(),
+      iotDevices: iotService.listDevices(),
+      alertWidgets: repos.alertWidgets.list(),
+    });
+  });
+
+  router.post('/import', (req, res) => {
+    const data = req.body || {};
+    const summary = { settings: 0, ttsPresets: 0, profanityRules: 0, triggers: 0, iotDevices: 0, alertWidgets: 0 };
+
+    try {
+      if (data.settings && typeof data.settings === 'object') {
+        for (const [key, value] of Object.entries(data.settings)) {
+          if (NON_EXPORTABLE_SETTINGS.has(key)) continue; // на всякий случай, если файл был отредактирован вручную
+          settings.set(key, value);
+          summary.settings++;
+        }
+      }
+      if (Array.isArray(data.ttsPresets)) {
+        for (const preset of data.ttsPresets) {
+          if (preset.source === 'tiktok' || preset.source === 'axelchat') {
+            repos.ttsPresets.update(preset.source, preset);
+            summary.ttsPresets++;
+          }
+        }
+      }
+      if (Array.isArray(data.profanityRules)) {
+        for (const rule of data.profanityRules) {
+          repos.profanityRules.create({
+            pattern: rule.pattern,
+            isRegex: !!rule.is_regex,
+            flags: rule.flags,
+            replacement: rule.replacement,
+            enabled: rule.enabled !== 0,
+          });
+          summary.profanityRules++;
+        }
+      }
+      if (Array.isArray(data.iotDevices)) {
+        for (const device of data.iotDevices) {
+          iotService.addDevice({
+            name: device.name,
+            baseUrl: device.base_url,
+            healthPingPath: device.health_ping_path,
+            healthPingIntervalMs: device.health_ping_interval_ms,
+            healthPingEnabled: !!device.health_ping_enabled,
+          });
+          summary.iotDevices++;
+        }
+      }
+      if (Array.isArray(data.alertWidgets)) {
+        for (const widget of data.alertWidgets) {
+          repos.alertWidgets.create({
+            name: widget.name,
+            mediaId: null, // ссылки на медиафайлы не переносятся — файлов нет на этом компьютере
+            durationMs: widget.duration_ms,
+            customCss: widget.custom_css,
+            textTemplate: widget.text_template,
+          });
+          summary.alertWidgets++;
+        }
+      }
+      if (Array.isArray(data.triggers)) {
+        for (const trigger of data.triggers) {
+          repos.triggers.create({
+            name: trigger.name,
+            enabled: !!trigger.enabled,
+            source: trigger.source,
+            eventType: trigger.event_type,
+            conditions: safeJsonParse(trigger.conditions_json),
+            cooldownMs: trigger.cooldown_ms,
+            actions: (trigger.actions || []).map((a) => ({
+              actionType: a.action_type,
+              config: safeJsonParse(a.config_json),
+            })),
+          });
+          summary.triggers++;
+        }
+      }
+
+      profanityFilter.reload();
+      triggerEngine.reload();
+      logger.info('system', 'Импортирована резервная копия настроек', summary);
+      res.json({ ok: true, summary });
+    } catch (err) {
+      res.status(400).json({ error: `Ошибка импорта: ${err.message}` });
+    }
+  });
+
   return router;
+}
+
+function safeJsonParse(str) {
+  if (!str) return {};
+  if (typeof str === 'object') return str; // уже объект (например, если пришло не из БД, а напрямую из JSON-файла экспорта)
+  try {
+    return JSON.parse(str);
+  } catch {
+    return {};
+  }
 }
 
 module.exports = { createApiRouter };

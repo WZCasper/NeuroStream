@@ -85,6 +85,7 @@
               <div class="row" style="margin-top:10px">
                 <button type="submit" class="btn primary">Подключиться</button>
                 <button type="button" id="btn-tiktok-disconnect" class="btn ghost">Отключить</button>
+                <button type="button" id="btn-tiktok-reconnect" class="btn ghost">🔄 Переподключить</button>
                 <button type="button" id="btn-tiktok-check-live" class="btn ghost">Проверить, в эфире ли</button>
               </div>
               <p class="hint" id="tiktok-status-detail" style="margin-top:8px"></p>
@@ -104,6 +105,7 @@
               <div class="row" style="margin-top:10px">
                 <button type="submit" class="btn primary">Подключиться</button>
                 <button type="button" id="btn-axelchat-disconnect" class="btn ghost">Отключить</button>
+                <button type="button" id="btn-axelchat-reconnect" class="btn ghost">🔄 Переподключить</button>
               </div>
               <p class="hint" id="axelchat-status-detail" style="margin-top:8px"></p>
             </form>
@@ -440,6 +442,19 @@
             <div class="theme-swatch" data-swatch="neon-purple" title="Neon Purple"></div>
             <div class="theme-swatch" data-swatch="cyber-green" title="Cyber Green"></div>
             <div class="theme-swatch" data-swatch="crimson-dark" title="Crimson Dark"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title">💾 Резервная копия настроек</h3>
+          <p class="hint">Сохраняет триггеры, виджеты алертов, пресеты озвучки, IoT-устройства и фильтр слов
+            в один файл — пригодится при переустановке Windows или переносе на другой компьютер.
+            Сессионные cookie TikTok и ключ подписи в копию не попадают (это как пароль — их нужно будет
+            указать заново на новом компьютере), медиафайлы тоже не входят — только ссылки на них.</p>
+          <div class="row" style="margin-top:10px">
+            <button type="button" class="btn" id="btn-export-settings">⬇ Экспортировать в файл</button>
+            <button type="button" class="btn" id="btn-import-settings">⬆ Импортировать из файла</button>
+            <input type="file" id="import-settings-file" accept="application/json" hidden>
           </div>
         </div>
 

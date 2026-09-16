@@ -7,6 +7,7 @@ const { Server: SocketIOServer } = require('socket.io');
 
 const { openDatabase, createSettingsRepo } = require('./db/database');
 const { createRepos } = require('./db/repos');
+const { createSecureSettingsRepo } = require('./lib/secureStore');
 const { Logger } = require('./lib/logger');
 const { EventBus } = require('./services/eventBus');
 const { TikTokConnectorService } = require('./services/tiktokConnector');
@@ -21,6 +22,10 @@ const { createApiRouter } = require('./routes/api');
 
 const DEFAULT_PORT = 47823;
 
+// Настройки, которые всегда должны храниться на диске в зашифрованном виде (это фактически
+// пароли/токены доступа к аккаунту TikTok) — см. src/server/lib/secureStore.js.
+const SENSITIVE_SETTINGS_KEYS = ['tiktokSessionId', 'tiktokTtTargetIdc', 'tiktokSignApiKey'];
+
 /**
  * Поднимает встроенный локальный сервер NeuroStream Studio: базу данных,
  * все фоновые сервисы (TikTok/AxelChat коннекторы, движок триггеров, TTS-очередь,
@@ -30,15 +35,21 @@ const DEFAULT_PORT = 47823;
  *   - предоставляет REST API (/api/**) для управления настройками,
  *   - транслирует события в реальном времени через Socket.io.
  *
- * @param {{ userDataDir: string, electronApp?: import('electron').App }} options
+ * @param {{ userDataDir: string, electronApp?: import('electron').App, safeStorage?: import('electron').safeStorage }} options
  */
-async function createServer({ userDataDir, electronApp = null }) {
+async function createServer({ userDataDir, electronApp = null, safeStorage = null }) {
   const db = openDatabase(userDataDir);
-  const settings = createSettingsRepo(db);
+  const rawSettings = createSettingsRepo(db);
+  const logger = new Logger(db);
+  const settings = createSecureSettingsRepo(rawSettings, safeStorage, SENSITIVE_SETTINGS_KEYS, {
+    warn: (msg) => logger.warn('system', msg),
+  });
+  const migratedCount = settings.migrateLegacyPlaintext();
+  if (migratedCount > 0) logger.info('system', `Зашифровано ${migratedCount} ранее незашифрованных настроек (сессия TikTok)`);
+
   const repos = createRepos(db);
   repos.ttsPresets.ensureDefaults();
 
-  const logger = new Logger(db);
   const eventBus = new EventBus();
   const mediaDir = path.join(userDataDir, 'media');
   const mediaLibrary = new MediaLibraryService(db, mediaDir);
@@ -148,6 +159,17 @@ async function createServer({ userDataDir, electronApp = null }) {
   resourceMonitor.start();
 
   iotService.startAll();
+
+  // ---------------- Автоочистка старого журнала (чтобы не рос бесконечно на долгих стримах) ----------------
+  const LOG_RETENTION_DAYS = 30;
+  const LOG_CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000; // раз в сутки
+  function cleanupOldLogs() {
+    const info = db.prepare("DELETE FROM logs WHERE created_at < datetime('now', ?)").run(`-${LOG_RETENTION_DAYS} days`);
+    if (info.changes > 0) logger.info('system', `Автоочистка журнала: удалено ${info.changes} записей старше ${LOG_RETENTION_DAYS} дней`);
+  }
+  cleanupOldLogs();
+  const logCleanupTimer = setInterval(cleanupOldLogs, LOG_CLEANUP_INTERVAL_MS);
+  logCleanupTimer.unref?.();
 
   // ---------------- Автозапуск подключений, если ранее настроены ----------------
   const savedTikTokUsername = settings.get('tiktokUniqueId');
