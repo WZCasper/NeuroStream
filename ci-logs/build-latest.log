@@ -1,0 +1,89 @@
+  • electron-builder  version=26.15.3 os=10.0.20348
+  • loaded configuration  file=package.json ("build" field)
+  • @electron/rebuild already used by electron-builder, please consider to remove excess dependency from devDependencies
+
+To ensure your native dependencies are always matched electron version, simply add script `"postinstall": "electron-builder install-app-deps" to your `package.json`
+  • executing @electron/rebuild  electronVersion=44.4.1 arch=x64 buildFromSource=false workspaceRoot=D:\a\NeuroStream\NeuroStream projectDir=./ appDir=./
+  • installing native dependencies  arch=x64
+  • preparing       moduleName=better-sqlite3 arch=x64
+  • finished        moduleName=better-sqlite3 arch=x64
+  • completed installing native dependencies
+  • packaging       platform=win32 arch=x64 electron=44.4.1 appOutDir=release\win-unpacked
+  • downloaded      label=electron progress=100%
+  • downloaded electron zip extracted successfully  output=D:\a\NeuroStream\NeuroStream\release\win-unpacked
+  • searching for node modules  pm=npm searchDir=D:\a\NeuroStream\NeuroStream
+  • duplicate dependency references  dependencies=["debug@4.4.3","debug@4.4.3","http-errors@2.0.1","on-finished@2.4.1","qs@6.16.0","http-errors@2.0.1","iconv-lite@0.7.3","type-is@2.1.0","debug@4.4.3","on-finished@2.4.1","get-intrinsic@1.3.0","call-bind-apply-helpers@1.0.2","call-bind-apply-helpers@1.0.2","es-object-atoms@1.1.2","hasown@2.0.4","call-bound@1.0.4","get-intrinsic@1.3.0","side-channel-map@1.0.1","debug@4.4.3","debug@4.4.3","http-errors@2.0.1","on-finished@2.4.1","send@1.2.1","mime-types@2.1.35","debug@4.4.3","@types/node@24.13.5","@types/node@24.13.5","mime-types@2.1.35","cors@2.8.6","debug@4.4.3","debug@4.4.3","debug@4.4.3","keyv@5.6.0","responselike@4.0.2","get-intrinsic@1.3.0","hasown@2.0.4","mime-types@2.1.35","debug@4.4.3","debug@4.4.3"]
+  • updating asar integrity executable resource  executablePath=release\win-unpacked\NeuroStream Studio.exe
+  • signing with signtool.exe  path=release\win-unpacked\NeuroStream Studio.exe
+  • building        target=nsis file=release\NeuroStream Studio Setup 1.0.12.exe archs=x64 oneClick=false perMachine=false
+  • downloaded      label=nsis-3.0.4.1.7z progress=100%
+  • downloaded      label=7zip-win-x64.tar.gz progress=100%
+  • signing with signtool.exe  path=release\win-unpacked\resources\elevate.exe
+  • downloaded      label=nsis-resources-3.4.1.7z progress=100%
+  • signing with signtool.exe  path=release\NeuroStream Studio Setup 1.0.12.__uninstaller.exe
+  • signing with signtool.exe  path=release\NeuroStream Studio Setup 1.0.12.exe
+  • building block map  blockMapFile=release\NeuroStream Studio Setup 1.0.12.exe.blockmap
+  • publishing      publisher=Github (owner: WZCasper, project: NeuroStream, version: 1.0.12)
+  • publishing      publisher=Github (owner: WZCasper, project: NeuroStream, version: 1.0.12)
+  • uploading       file=NeuroStream-Studio-Setup-1.0.12.exe.blockmap provider=github
+  • uploading       file=NeuroStream-Studio-Setup-1.0.12.exe provider=github
+  • creating GitHub release  reason=release doesn't exist tag=v1.0.12 version=1.0.12
+  • creating GitHub release  reason=release doesn't exist tag=v1.0.12 version=1.0.12
+  ⨯ 422 Unprocessable Entity
+"method: post url: https://api.github.com/repos/WZCasper/NeuroStream/releases\n\n          Data:\n          {\n  \"message\": \"Validation Failed\",\n  \"errors\": [\n    {\n      \"resource\": \"Release\",\n      \"code\": \"custom\",\n      \"message\": \"Published releases must have a valid tag\"\n    }\n  ],\n  \"documentation_url\": \"https://docs.github.com/rest/releases/releases#create-a-release\",\n  \"status\": \"422\"\n}\n          "
+Headers: {
+  "date": "Wed, 16 Sep 2026 09:36:50 GMT",
+  "content-type": "application/json; charset=utf-8",
+  "content-length": "235",
+  "x-github-media-type": "github.v3; format=json",
+  "x-accepted-github-permissions": "contents=write; contents=write,workflows=write",
+  "x-github-api-version-selected": "2022-11-28",
+  "access-control-expose-headers": "ETag, Link, Location, Retry-After, X-GitHub-OTP, X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Used, X-RateLimit-Resource, X-RateLimit-Reset, X-OAuth-Scopes, X-Accepted-OAuth-Scopes, X-Poll-Interval, X-GitHub-Media-Type, X-GitHub-SSO, X-GitHub-Request-Id, Deprecation, Sunset, Warning",
+  "access-control-allow-origin": "*",
+  "strict-transport-security": "max-age=31536000; includeSubdomains; preload",
+  "x-frame-options": "deny",
+  "x-content-type-options": "nosniff",
+  "x-xss-protection": "0",
+  "referrer-policy": "origin-when-cross-origin, strict-origin-when-cross-origin",
+  "content-security-policy": "default-src 'none'",
+  "vary": "Accept-Encoding, Accept, X-Requested-With",
+  "x-github-request-id": "8400:2244B9:1D217A2:6179E67:6AAA6332",
+  "x-github-edge-region": "iad",
+  "server": "github.com",
+  "x-ratelimit-limit": "5000",
+  "x-ratelimit-remaining": "4999",
+  "x-ratelimit-reset": "1789555010",
+  "x-ratelimit-used": "1",
+  "x-ratelimit-resource": "core"
+}  failedTask=build stackTrace=HttpError: 422 Unprocessable Entity
+"method: post url: https://api.github.com/repos/WZCasper/NeuroStream/releases\n\n          Data:\n          {\n  \"message\": \"Validation Failed\",\n  \"errors\": [\n    {\n      \"resource\": \"Release\",\n      \"code\": \"custom\",\n      \"message\": \"Published releases must have a valid tag\"\n    }\n  ],\n  \"documentation_url\": \"https://docs.github.com/rest/releases/releases#create-a-release\",\n  \"status\": \"422\"\n}\n          "
+Headers: {
+  "date": "Wed, 16 Sep 2026 09:36:50 GMT",
+  "content-type": "application/json; charset=utf-8",
+  "content-length": "235",
+  "x-github-media-type": "github.v3; format=json",
+  "x-accepted-github-permissions": "contents=write; contents=write,workflows=write",
+  "x-github-api-version-selected": "2022-11-28",
+  "access-control-expose-headers": "ETag, Link, Location, Retry-After, X-GitHub-OTP, X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Used, X-RateLimit-Resource, X-RateLimit-Reset, X-OAuth-Scopes, X-Accepted-OAuth-Scopes, X-Poll-Interval, X-GitHub-Media-Type, X-GitHub-SSO, X-GitHub-Request-Id, Deprecation, Sunset, Warning",
+  "access-control-allow-origin": "*",
+  "strict-transport-security": "max-age=31536000; includeSubdomains; preload",
+  "x-frame-options": "deny",
+  "x-content-type-options": "nosniff",
+  "x-xss-protection": "0",
+  "referrer-policy": "origin-when-cross-origin, strict-origin-when-cross-origin",
+  "content-security-policy": "default-src 'none'",
+  "vary": "Accept-Encoding, Accept, X-Requested-With",
+  "x-github-request-id": "8400:2244B9:1D217A2:6179E67:6AAA6332",
+  "x-github-edge-region": "iad",
+  "server": "github.com",
+  "x-ratelimit-limit": "5000",
+  "x-ratelimit-remaining": "4999",
+  "x-ratelimit-reset": "1789555010",
+  "x-ratelimit-used": "1",
+  "x-ratelimit-resource": "core"
+}
+    at createHttpError (D:\a\NeuroStream\NeuroStream\node_modules\builder-util-runtime\src\httpExecutor.ts:66:10)
+    at IncomingMessage.<anonymous> (D:\a\NeuroStream\NeuroStream\node_modules\builder-util-runtime\src\httpExecutor.ts:241:13)
+    at IncomingMessage.emit (node:events:531:35)
+    at endReadableNT (node:internal/streams/readable:1698:12)
+    at processTicksAndRejections (node:internal/process/task_queues:89:21)

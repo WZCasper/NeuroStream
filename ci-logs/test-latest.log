@@ -1,0 +1,32 @@
+
+> neurostream-studio@1.0.0 test
+> node test/smoke.test.js
+
+[system] NeuroStream Studio сервер запущен на порту 47823 
+Сервер поднят на http://127.0.0.1:47823, userDataDir=C:\Users\RUNNER~1\AppData\Local\Temp\nss-smoke-h1KfBY
+
+  ✅ GET /index.html -> 200
+  ✅ GET /overlay.html -> 200
+  ✅ GET /tts-host.html -> 200
+  ✅ GET /api/settings -> 200 {}
+  ✅ GET /api/tts/presets -> оба источника созданы по умолчанию
+  ✅ POST /api/triggers создаёт триггер
+[trigger] Тестовый запуск триггера "Smoke test trigger" 
+  ✅ POST /api/triggers/:id/test запускает действия без ошибок
+  ✅ DELETE /api/triggers/:id удаляет триггер
+  ✅ GET /api/export возвращает копию БЕЗ чувствительных данных
+[system] Импортирована резервная копия настроек {
+  settings: 0,
+  ttsPresets: 0,
+  profanityRules: 0,
+  triggers: 1,
+  iotDevices: 1,
+  alertWidgets: 0
+}
+  ✅ POST /api/import восстанавливает триггеры и устройства
+  ✅ POST /api/tiktok/reconnect без настроенного подключения -> понятная ошибка
+  ✅ Socket.io: клиент подключается и получает начальное состояние
+     (заняло 42мс)
+  ✅ shutdown() завершается быстрее 4000мс даже с открытым Socket.io-соединением
+
+13 пройдено, 0 провалено
