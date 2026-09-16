@@ -48,14 +48,31 @@ jobs:
           "
           echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
 
-      - name: Build and publish Windows installer (electron-builder)
+      - name: Build Windows installer (electron-builder)
         id: build
         if: steps.test.outcome == 'success'
         shell: bash
         continue-on-error: true
+        run: npx electron-builder --win nsis --publish never 2>&1 | tee build.log
+
+      # Публикуем релиз сами через gh CLI: electron-builder с --publish always упирается
+      # в ошибку GitHub "Published releases must have a valid tag", а этот способ уже
+      # проверен и работает стабильно. Вместе с установщиком обязательно публикуем
+      # latest.yml — именно его читает electron-updater, чтобы понять, что вышла новая версия.
+      - name: Publish GitHub Release (installer + latest.yml for auto-update)
+        id: publish
+        if: steps.build.outcome == 'success'
+        shell: bash
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx electron-builder --win nsis --publish always 2>&1 | tee build.log
+        run: |
+          version="${{ steps.bump_version.outputs.version }}"
+          installer=$(ls release/*.exe | head -n 1)
+          gh release create "v${version}" "$installer" release/latest.yml \
+            --title "NeuroStream Studio v${version}" \
+            --notes "Автоматическая сборка из коммита ${{ github.sha }}." \
+            --repo "${{ github.repository }}" 2>&1 | tee publish.log
 
       - name: Upload build artifact
         if: steps.build.outcome == 'success'
@@ -66,7 +83,7 @@ jobs:
           retention-days: 30
 
       - name: Publish diagnostic logs on failure
-        if: steps.install.outcome == 'failure' || steps.test.outcome == 'failure' || steps.build.outcome == 'failure'
+        if: steps.install.outcome == 'failure' || steps.test.outcome == 'failure' || steps.build.outcome == 'failure' || steps.publish.outcome == 'failure'
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -78,11 +95,12 @@ jobs:
           cp install.log ci-logs/install-latest.log 2>/dev/null || echo "(no install.log)" > ci-logs/install-latest.log
           cp test.log ci-logs/test-latest.log 2>/dev/null || echo "(no test.log)" > ci-logs/test-latest.log
           cp build.log ci-logs/build-latest.log 2>/dev/null || echo "(no build.log)" > ci-logs/build-latest.log
+          cp publish.log ci-logs/publish-latest.log 2>/dev/null || echo "(no publish.log)" > ci-logs/publish-latest.log
           echo "run_number=${{ github.run_number }}" > ci-logs/meta.txt
           git add ci-logs
           git commit -m "CI diagnostic logs (run #${{ github.run_number }})" --allow-empty
           git push -f origin ci-logs
 
       - name: Fail job if any step failed
-        if: steps.install.outcome == 'failure' || steps.test.outcome == 'failure' || steps.build.outcome == 'failure'
+        if: steps.install.outcome == 'failure' || steps.test.outcome == 'failure' || steps.build.outcome == 'failure' || steps.publish.outcome == 'failure'
         run: exit 1
