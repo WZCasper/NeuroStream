@@ -1,6 +1,7 @@
 'use strict';
 
 const { EventEmitter } = require('node:events');
+const { renderTemplate } = require('../lib/template');
 
 /**
  * TriggerEngine — слушает нормализованные события из eventBus, сопоставляет
@@ -85,6 +86,20 @@ class TriggerEngine extends EventEmitter {
     return this.triggers.length;
   }
 
+  /**
+   * true, если для события есть включённый триггер с действием «Озвучка». Тогда озвучкой
+   * управляет этот триггер, а автоозвучка по галочкам не должна дублировать фразу.
+   */
+  hasTtsTriggerFor(event) {
+    return this.triggers.some(
+      (t) =>
+        this._sourceMatches(t, event) &&
+        this._eventTypeMatches(t, event) &&
+        this._conditionsMatch(t, event) &&
+        t.actions.some((a) => a.action_type === 'tts')
+    );
+  }
+
   async _handleEvent(event) {
     for (const trigger of this.triggers) {
       if (!this._sourceMatches(trigger, event)) continue;
@@ -121,7 +136,7 @@ class TriggerEngine extends EventEmitter {
       case 'gift': {
         if (c.giftId !== undefined && Number(event.giftId) !== Number(c.giftId)) return false;
         if (c.giftName && String(event.giftName || '').toLowerCase() !== String(c.giftName).toLowerCase()) return false;
-        if (c.minCoins && (event.diamondCount || 0) < Number(c.minCoins)) return false;
+        if (c.minCoins && giftTotalCoins(event) < Number(c.minCoins)) return false;
         return true;
       }
       case 'chat_keyword': {
@@ -250,17 +265,6 @@ class TriggerEngine extends EventEmitter {
   }
 }
 
-function renderTemplate(template, event) {
-  const vars = {
-    user: event.author?.name || 'Зритель',
-    text: event.text || '',
-    gift: event.giftName || '',
-    count: event.repeatCount || 1,
-    coins: event.diamondCount || 0,
-  };
-  return String(template || '{user}: {text}').replace(/\{(\w+)\}/g, (m, key) => (key in vars ? String(vars[key]) : m));
-}
-
 /**
  * Строит правдоподобное тестовое событие для кнопки «Тест» триггера — чтобы шаблоны
  * ({user}, {gift}, {text}…) отрендерились осмысленно, даже когда реального события ещё не было.
@@ -285,6 +289,12 @@ function buildSyntheticEvent(trigger) {
     default:
       return { ...base, type: trigger.event_type };
   }
+}
+
+/** Итоговая стоимость подарка с учётом серии (10 подарков по 1 монете = 10). */
+function giftTotalCoins(event) {
+  if (event.totalDiamonds !== undefined) return Number(event.totalDiamonds) || 0;
+  return (Number(event.diamondCount) || 0) * (Number(event.repeatCount) || 1);
 }
 
 function safeParseJSON(str, fallback) {

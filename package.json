@@ -15,7 +15,7 @@
     "postinstall": "electron-builder install-app-deps",
     "pack": "electron-builder --dir",
     "dist": "electron-builder --win nsis --publish=never",
-    "test": "node test/smoke.test.js"
+    "test": "node test/smoke.test.js && node test/tiktok.test.js && node test/autospeak.test.js && node test/axelchat.test.js && node test/security.test.js && node test/main.test.js"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",

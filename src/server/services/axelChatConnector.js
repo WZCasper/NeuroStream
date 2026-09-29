@@ -41,11 +41,14 @@ class AxelChatConnectorService extends EventEmitter {
   /**
    * @param {import('./eventBus').EventBus} eventBus
    * @param {import('../lib/logger').Logger} logger
+   * @param {{ aliveTimeoutMs?: number, minReconnectDelayMs?: number }} [deps]  тайм-ауты; настраиваются для автотестов
    */
-  constructor(eventBus, logger) {
+  constructor(eventBus, logger, deps = {}) {
     super();
     this.eventBus = eventBus;
     this.logger = logger;
+    this._aliveTimeoutMs = deps.aliveTimeoutMs || ALIVE_TIMEOUT_MS;
+    this._minReconnectDelayMs = deps.minReconnectDelayMs || MIN_RECONNECT_DELAY_MS;
 
     this.host = DEFAULT_HOST;
     this.port = DEFAULT_PORT;
@@ -90,46 +93,58 @@ class AxelChatConnectorService extends EventEmitter {
     this.port = options.port || DEFAULT_PORT;
     this._reconnectAttempt = 0;
     this.reconnectCountThisSession = 0;
+    this._clearTimers();
     this._connect();
   }
 
   /** Принудительное переподключение по кнопке в интерфейсе. */
   reconnectNow() {
-    if (this._reconnectTimer) {
-      clearTimeout(this._reconnectTimer);
-      this._reconnectTimer = null;
-    }
-    if (this.ws) {
-      try {
-        this.ws.close();
-      } catch {
-        /* уже могло быть закрыто */
-      }
-    }
+    this._stopped = false;
+    this._clearTimers();
     this._reconnectAttempt = 0;
     this._connect();
   }
 
   stop() {
     this._stopped = true;
-    if (this._reconnectTimer) clearTimeout(this._reconnectTimer);
-    if (this._aliveTimer) clearInterval(this._aliveTimer);
-    this._reconnectTimer = null;
-    this._aliveTimer = null;
-    if (this.ws) {
-      try {
-        this.ws.close();
-      } catch {
-        // сокет уже мог быть закрыт
-      }
-    }
+    this._clearTimers();
+    this._dropSocket(this.ws);
+    this.ws = null;
     this.connectedSince = null;
     this._setStatus('stopped', { message: null });
+  }
+
+  _clearTimers() {
+    if (this._reconnectTimer) clearTimeout(this._reconnectTimer);
+    if (this._aliveTimer) clearTimeout(this._aliveTimer);
+    this._reconnectTimer = null;
+    this._aliveTimer = null;
+  }
+
+  /**
+   * Полностью отключает сокет: сначала снимает наши обработчики, затем закрывает.
+   * Так «эхо» от закрытия старого сокета (событие 'close') не запускает лишнее
+   * переподключение — раньше именно из-за этого каждое нажатие «Переподключить»
+   * оставляло ещё одно живое соединение.
+   */
+  _dropSocket(socket) {
+    if (!socket) return;
+    socket.removeAllListeners();
+    socket.on('error', () => {}); // ws бросает исключение на 'error' без слушателей (в т.ч. при закрытии во время рукопожатия)
+    try {
+      socket.terminate();
+    } catch {
+      /* уже закрыт */
+    }
   }
 
   _connect() {
     if (this._stopped) return;
     this._setStatus(this._reconnectAttempt > 0 ? 'reconnecting' : 'connecting');
+
+    // Ровно одно соединение: предыдущее (если есть) закрывается до создания нового.
+    this._dropSocket(this.ws);
+    this.ws = null;
 
     const url = `ws://${this.host}:${this.port}`;
     let socket;
@@ -140,34 +155,45 @@ class AxelChatConnectorService extends EventEmitter {
       return;
     }
     this.ws = socket;
+    const isCurrent = () => socket === this.ws && !this._stopped;
 
     socket.on('open', () => {
+      if (!isCurrent()) return;
       this._reconnectAttempt = 0;
       this.connectedSince = new Date().toISOString();
       this._setStatus('connected');
       this.logger.info('axelchat', `Подключено к AxelChat (${url})`);
-      this._resetAliveWatchdog();
+      this._resetAliveWatchdog(socket);
     });
 
     socket.on('message', (raw) => {
-      this._resetAliveWatchdog();
+      if (!isCurrent()) return;
+      this._resetAliveWatchdog(socket);
       let msg;
       try {
         msg = JSON.parse(raw.toString());
       } catch {
         return; // не JSON — игнорируем
       }
-      this._handleMessage(msg);
+      try {
+        this._handleMessage(msg);
+      } catch (err) {
+        // Ошибка в подписчике шины не должна вылетать в цикл приёма сообщений сокета.
+        this.logger.error('axelchat', `Ошибка обработки сообщения AxelChat: ${err.message}`);
+      }
     });
 
     socket.on('close', () => {
-      if (this._stopped) return;
+      if (!isCurrent()) return;
+      if (this._aliveTimer) clearTimeout(this._aliveTimer);
+      this._aliveTimer = null;
       this.logger.warn('axelchat', 'Соединение с AxelChat разорвано');
       this._setStatus('reconnecting');
       this._scheduleReconnect();
     });
 
     socket.on('error', (err) => {
+      if (!isCurrent()) return;
       // 'error' обычно сопровождается 'close' — здесь фиксируем причину для отображения в UI.
       const message = friendlyErrorMessage(err);
       this.logger.warn('axelchat', `AxelChat недоступен: ${message}`);
@@ -181,30 +207,38 @@ class AxelChatConnectorService extends EventEmitter {
     this._scheduleReconnect();
   }
 
-  _resetAliveWatchdog() {
-    if (this._aliveTimer) clearInterval(this._aliveTimer);
-    this._aliveTimer = setInterval(() => {
+  /**
+   * «Сторож»: AxelChat регулярно шлёт SERVER_ALIVE. Если тишина дольше тайм-аута ПРИ
+   * ОТКРЫТОМ соединении — оно считается зависшим и переустанавливается. Это разовый таймер,
+   * который сбрасывается каждым сообщением и гасится при закрытии сокета — поэтому он больше
+   * не ругается на выключенный AxelChat и не трогает соединение, которое ещё устанавливается.
+   */
+  _resetAliveWatchdog(socket) {
+    if (this._aliveTimer) clearTimeout(this._aliveTimer);
+    this._aliveTimer = setTimeout(() => {
+      this._aliveTimer = null;
+      if (socket !== this.ws || this._stopped) return;
       this.logger.warn('axelchat', 'AxelChat не отвечает (нет SERVER_ALIVE) — переподключение');
-      if (this.ws) {
-        try {
-          this.ws.terminate();
-        } catch {
-          /* игнорируем */
-        }
-      }
-    }, ALIVE_TIMEOUT_MS);
+      this._dropSocket(socket);
+      this.ws = null;
+      this._setStatus('reconnecting');
+      this._scheduleReconnect();
+    }, this._aliveTimeoutMs);
+    if (this._aliveTimer.unref) this._aliveTimer.unref();
   }
 
   _scheduleReconnect() {
     if (this._stopped) return;
+    if (this._reconnectTimer) clearTimeout(this._reconnectTimer);
     this._reconnectAttempt += 1;
     this.reconnectCountThisSession += 1;
     this.connectedSince = null;
     const delay = Math.min(
-      MIN_RECONNECT_DELAY_MS * 2 ** (this._reconnectAttempt - 1),
+      this._minReconnectDelayMs * 2 ** (this._reconnectAttempt - 1),
       MAX_RECONNECT_DELAY_MS
     );
     this._reconnectTimer = setTimeout(() => {
+      this._reconnectTimer = null;
       if (!this._stopped) this._connect();
     }, delay);
   }

@@ -17,8 +17,11 @@ const { TTSQueueManager } = require('./services/ttsQueue');
 const { IoTService } = require('./services/iotService');
 const { MediaLibraryService } = require('./services/mediaLibrary');
 const { TriggerEngine } = require('./services/triggerEngine');
+const { AutoSpeakService } = require('./services/autoSpeak');
 const { ResourceMonitorService } = require('./services/resourceMonitor');
 const { createApiRouter } = require('./routes/api');
+const { createLocalGuard } = require('./lib/localGuard');
+const { createApiErrorHandler } = require('./lib/httpErrors');
 
 const DEFAULT_PORT = 47823;
 
@@ -71,7 +74,23 @@ async function createServer({ userDataDir, electronApp = null, safeStorage = nul
     tiktokConnector
   );
 
+  const autoSpeak = new AutoSpeakService({
+    eventBus,
+    ttsQueue,
+    profanityFilter,
+    getPreset: (source) => repos.ttsPresets.getForSource(source),
+    hasTtsTrigger: (event) => triggerEngine.hasTtsTriggerFor(event),
+    logger,
+  });
+
+  // localGuard проверяет, что запрос пришёл именно на наш локальный порт (заголовок Host) и,
+  // если это запрос из браузерной страницы, что страница — наша же (заголовок Origin).
+  // Без этого любой открытый в браузере посторонний сайт мог бы читать настройки (включая
+  // сессию TikTok), запускать триггеры и слушать журнал через сокет — см. src/server/lib/localGuard.js.
+  const localGuard = createLocalGuard();
+
   const app = express();
+  app.use(localGuard.middleware);
   app.use(express.json({ limit: '2mb' }));
 
   const staticRendererDir = path.join(__dirname, '..', 'renderer');
@@ -80,7 +99,10 @@ async function createServer({ userDataDir, electronApp = null, safeStorage = nul
 
   const httpServer = http.createServer(app);
   const io = new SocketIOServer(httpServer, {
-    cors: { origin: '*' }, // сервер слушает только localhost, поэтому открытый CORS безопасен
+    // Порт наш собственный (127.0.0.1), но без allowRequest чужой сайт в браузере пользователя
+    // тоже мог бы открыть сюда WebSocket-соединение и слушать чат/журнал — allowRequest это отсекает.
+    cors: { origin: '*' },
+    allowRequest: (req, callback) => localGuard.allowRequest(req, callback),
   });
 
   app.use(
@@ -101,9 +123,25 @@ async function createServer({ userDataDir, electronApp = null, safeStorage = nul
     })
   );
 
+  // Единый обработчик ошибок API: всегда JSON, полный текст ошибки — только в журнал программы.
+  app.use(createApiErrorHandler(logger));
+
   // ---------------- Socket.io: реальное время ----------------
   const overlaySocketIds = new Set();
   const broadcastOverlayCount = () => io.emit('overlay:connectionCount', overlaySocketIds.size);
+
+  // Оборачивает обработчик входящего события сокета: приводит payload к объекту (клиент может
+  // прислать undefined/null/строку/что угодно — это не должно ронять сервер) и ловит исключения
+  // внутри обработчика, чтобы одно кривое сообщение не обрывало соединение остальным клиентам.
+  const safeOn = (socket, event, handler) => {
+    socket.on(event, (payload) => {
+      try {
+        handler(payload && typeof payload === 'object' ? payload : {});
+      } catch (err) {
+        logger.error('system', `Ошибка обработки события сокета «${event}»: ${err.message}`);
+      }
+    });
+  };
 
   io.on('connection', (socket) => {
     // При подключении сразу отправляем текущее состояние, чтобы UI не ждал следующего события.
@@ -117,7 +155,7 @@ async function createServer({ userDataDir, electronApp = null, safeStorage = nul
     // Страница overlay.html (OBS Browser Source / TikTok LIVE Studio Link Source) сообщает
     // о себе явно — это позволяет панели управления показать честный статус "подключено",
     // а не предполагать, что где-то там всё работает.
-    socket.on('client:identify', ({ type } = {}) => {
+    safeOn(socket, 'client:identify', ({ type }) => {
       if (type === 'overlay') {
         overlaySocketIds.add(socket.id);
         broadcastOverlayCount();
@@ -128,11 +166,11 @@ async function createServer({ userDataDir, electronApp = null, safeStorage = nul
       if (overlaySocketIds.delete(socket.id)) broadcastOverlayCount();
     });
 
-    socket.on('tts:utteranceEnd', ({ source, queueId }) => {
+    safeOn(socket, 'tts:utteranceEnd', ({ source, queueId }) => {
       ttsQueue.markDone(source, queueId);
     });
 
-    socket.on('tts:testVoice', ({ source, text, voice }) => {
+    safeOn(socket, 'tts:testVoice', ({ source, text, voice }) => {
       // Позволяет вкладке TTS & Chat проверить голос, минуя очередь конкретного источника.
       socket.emit('tts:speak', { source: `test-${source}`, queueId: 'test', text, voice });
     });
@@ -154,6 +192,20 @@ async function createServer({ userDataDir, electronApp = null, safeStorage = nul
   });
 
   ttsQueue.on('speak', (cmd) => io.emit('tts:speak', cmd));
+  // Записи в журнал о проблемах очереди — не чаще раза в 10 секунд, чтобы при потоке
+  // сообщений сам журнал не превратился в спам.
+  let lastTtsWarnAt = 0;
+  const warnTtsThrottled = (message) => {
+    if (Date.now() - lastTtsWarnAt < 10000) return;
+    lastTtsWarnAt = Date.now();
+    logger.warn('tts', message);
+  };
+  ttsQueue.on('dropped', ({ source, count }) =>
+    warnTtsThrottled(`Очередь озвучки «${source}» переполнена — отброшены самые старые сообщения (${count})`)
+  );
+  ttsQueue.on('timeout', ({ source }) =>
+    warnTtsThrottled(`Озвучка «${source}»: окно озвучки не сообщило об окончании фразы — очередь продолжена`)
+  );
 
   resourceMonitor.on('sample', (sample) => io.emit('resource:sample', sample));
   resourceMonitor.start();
@@ -188,6 +240,7 @@ async function createServer({ userDataDir, electronApp = null, safeStorage = nul
   }
 
   const port = await listenOnFreePort(httpServer, Number(process.env.NSS_PORT) || DEFAULT_PORT);
+  localGuard.setPort(port); // до этого момента localGuard отклонял всё — это безопасное поведение по умолчанию
   logger.info('system', `NeuroStream Studio сервер запущен на порту ${port}`);
 
   return {
@@ -209,6 +262,7 @@ async function createServer({ userDataDir, electronApp = null, safeStorage = nul
       axelChatConnector,
       resourceMonitor,
       triggerEngine,
+      autoSpeak,
     },
     async shutdown() {
       resourceMonitor.stop();
@@ -216,6 +270,8 @@ async function createServer({ userDataDir, electronApp = null, safeStorage = nul
       await tiktokConnector.stop();
       axelChatConnector.stop();
       triggerEngine.destroy();
+      autoSpeak.destroy();
+      ttsQueue.destroy();
       // io.close() отключает все Socket.io-соединения (окна Electron держат их постоянно
       // открытыми) и только после этого закрывает сам httpServer — обычный httpServer.close()
       // без этого зависает навсегда, ожидая закрытия соединений, которые сами никогда не закроются.

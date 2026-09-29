@@ -4,6 +4,8 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const express = require('express');
 const multer = require('multer');
+const { validateImportPayload } = require('../lib/importValidation');
+const { apiNotFound } = require('../lib/httpErrors');
 
 const ALLOWED_MEDIA_EXT = new Set(['.webm', '.mp4', '.gif', '.png', '.jpg', '.jpeg', '.mp3', '.wav', '.ogg']);
 
@@ -13,6 +15,7 @@ const ALLOWED_MEDIA_EXT = new Set(['.webm', '.mp4', '.gif', '.png', '.jpg', '.jp
  */
 function createApiRouter(ctx) {
   const {
+    db,
     settings,
     repos,
     logger,
@@ -370,27 +373,38 @@ function createApiRouter(ctx) {
   });
 
   router.post('/import', (req, res) => {
-    const data = req.body || {};
-    const summary = { settings: 0, ttsPresets: 0, profanityRules: 0, triggers: 0, iotDevices: 0, alertWidgets: 0 };
+    const data = req.body;
 
+    // 1) Сначала проверяем весь файл — ничего не меняя.
+    const problems = validateImportPayload(data);
+    if (problems.length > 0) {
+      const shown = problems.slice(0, 5).join('; ');
+      return res.status(400).json({
+        error: `Файл не импортирован, ничего не изменено. Найдено ошибок: ${problems.length}. ${shown}${problems.length > 5 ? '…' : ''}`,
+        errors: problems,
+      });
+    }
+
+    const summary = { settings: 0, ttsPresets: 0, profanityRules: 0, triggers: 0, iotDevices: 0, alertWidgets: 0 };
+    const createdDevices = [];
+
+    // 2) Все записи — одной транзакцией: любая ошибка откатывает всё, «полуимпорта» не бывает.
     try {
-      if (data.settings && typeof data.settings === 'object') {
-        for (const [key, value] of Object.entries(data.settings)) {
-          if (NON_EXPORTABLE_SETTINGS.has(key)) continue; // на всякий случай, если файл был отредактирован вручную
-          settings.set(key, value);
-          summary.settings++;
+      db.transaction(() => {
+        if (data.settings) {
+          for (const [key, value] of Object.entries(data.settings)) {
+            if (NON_EXPORTABLE_SETTINGS.has(key)) continue; // на всякий случай, если файл был отредактирован вручную
+            settings.set(key, value);
+            summary.settings++;
+          }
         }
-      }
-      if (Array.isArray(data.ttsPresets)) {
-        for (const preset of data.ttsPresets) {
+        for (const preset of data.ttsPresets || []) {
           if (preset.source === 'tiktok' || preset.source === 'axelchat') {
             repos.ttsPresets.update(preset.source, preset);
             summary.ttsPresets++;
           }
         }
-      }
-      if (Array.isArray(data.profanityRules)) {
-        for (const rule of data.profanityRules) {
+        for (const rule of data.profanityRules || []) {
           repos.profanityRules.create({
             pattern: rule.pattern,
             isRegex: !!rule.is_regex,
@@ -400,21 +414,22 @@ function createApiRouter(ctx) {
           });
           summary.profanityRules++;
         }
-      }
-      if (Array.isArray(data.iotDevices)) {
-        for (const device of data.iotDevices) {
-          iotService.addDevice({
-            name: device.name,
-            baseUrl: device.base_url,
-            healthPingPath: device.health_ping_path,
-            healthPingIntervalMs: device.health_ping_interval_ms,
-            healthPingEnabled: !!device.health_ping_enabled,
-          });
+        for (const device of data.iotDevices || []) {
+          createdDevices.push(
+            iotService.addDevice(
+              {
+                name: device.name,
+                baseUrl: device.base_url,
+                healthPingPath: device.health_ping_path,
+                healthPingIntervalMs: device.health_ping_interval_ms,
+                healthPingEnabled: !!device.health_ping_enabled,
+              },
+              { startPinging: false } // пинги — только после успешного завершения транзакции
+            )
+          );
           summary.iotDevices++;
         }
-      }
-      if (Array.isArray(data.alertWidgets)) {
-        for (const widget of data.alertWidgets) {
+        for (const widget of data.alertWidgets || []) {
           repos.alertWidgets.create({
             name: widget.name,
             mediaId: null, // ссылки на медиафайлы не переносятся — файлов нет на этом компьютере
@@ -424,9 +439,7 @@ function createApiRouter(ctx) {
           });
           summary.alertWidgets++;
         }
-      }
-      if (Array.isArray(data.triggers)) {
-        for (const trigger of data.triggers) {
+        for (const trigger of data.triggers || []) {
           repos.triggers.create({
             name: trigger.name,
             enabled: !!trigger.enabled,
@@ -441,16 +454,22 @@ function createApiRouter(ctx) {
           });
           summary.triggers++;
         }
-      }
-
-      profanityFilter.reload();
-      triggerEngine.reload();
-      logger.info('system', 'Импортирована резервная копия настроек', summary);
-      res.json({ ok: true, summary });
+      })();
     } catch (err) {
-      res.status(400).json({ error: `Ошибка импорта: ${err.message}` });
+      return res.status(400).json({ error: `Ошибка импорта, изменения не применены: ${err.message}` });
     }
+
+    // 3) Только теперь обновляем работающие службы.
+    profanityFilter.reload();
+    triggerEngine.reload();
+    createdDevices.forEach((device) => iotService.startPingingDevice(device));
+
+    logger.info('system', 'Импортирована резервная копия настроек', summary);
+    return res.json({ ok: true, summary });
   });
+
+  // Несуществующий маршрут /api/** — понятная JSON-ошибка, а не HTML-страница со стеком.
+  router.use(apiNotFound);
 
   return router;
 }

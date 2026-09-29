@@ -103,32 +103,38 @@ function createRepos(db) {
       return trigger;
     },
     create({ name, enabled, source, eventType, conditions, cooldownMs, actions }) {
-      const info = db
-        .prepare(
-          `INSERT INTO triggers (name, enabled, source, event_type, conditions_json, cooldown_ms)
-           VALUES (?,?,?,?,?,?)`
-        )
-        .run(name, enabled === false ? 0 : 1, source || 'tiktok', eventType, JSON.stringify(conditions || {}), cooldownMs || 0);
-      const id = info.lastInsertRowid;
-      this._replaceActions(id, actions || []);
-      return this.get(id);
+      // Одной транзакцией: триггер и все его действия появляются вместе или не появляются вовсе.
+      return db.transaction(() => {
+        const info = db
+          .prepare(
+            `INSERT INTO triggers (name, enabled, source, event_type, conditions_json, cooldown_ms)
+             VALUES (?,?,?,?,?,?)`
+          )
+          .run(name, enabled === false ? 0 : 1, source || 'tiktok', eventType, JSON.stringify(conditions || {}), cooldownMs || 0);
+        const id = info.lastInsertRowid;
+        this._replaceActions(id, actions || []);
+        return this.get(id);
+      })();
     },
     update(id, { name, enabled, source, eventType, conditions, cooldownMs, actions }) {
-      const current = db.prepare('SELECT * FROM triggers WHERE id = ?').get(id);
-      if (!current) return null;
-      db.prepare(
-        `UPDATE triggers SET name=?, enabled=?, source=?, event_type=?, conditions_json=?, cooldown_ms=? WHERE id=?`
-      ).run(
-        name ?? current.name,
-        enabled !== undefined ? (enabled ? 1 : 0) : current.enabled,
-        source ?? current.source,
-        eventType ?? current.event_type,
-        conditions !== undefined ? JSON.stringify(conditions) : current.conditions_json,
-        cooldownMs !== undefined ? cooldownMs : current.cooldown_ms,
-        id
-      );
-      if (actions !== undefined) this._replaceActions(id, actions);
-      return this.get(id);
+      // Одной транзакцией: если новое действие некорректно, прежние действия триггера не пропадают.
+      return db.transaction(() => {
+        const current = db.prepare('SELECT * FROM triggers WHERE id = ?').get(id);
+        if (!current) return null;
+        db.prepare(
+          `UPDATE triggers SET name=?, enabled=?, source=?, event_type=?, conditions_json=?, cooldown_ms=? WHERE id=?`
+        ).run(
+          name ?? current.name,
+          enabled !== undefined ? (enabled ? 1 : 0) : current.enabled,
+          source ?? current.source,
+          eventType ?? current.event_type,
+          conditions !== undefined ? JSON.stringify(conditions) : current.conditions_json,
+          cooldownMs !== undefined ? cooldownMs : current.cooldown_ms,
+          id
+        );
+        if (actions !== undefined) this._replaceActions(id, actions);
+        return this.get(id);
+      })();
     },
     remove(id) {
       db.prepare('DELETE FROM triggers WHERE id = ?').run(id); // trigger_actions удалятся каскадно (ON DELETE CASCADE)

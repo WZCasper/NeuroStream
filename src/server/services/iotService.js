@@ -35,7 +35,11 @@ class IoTService extends EventEmitter {
     return this.db.prepare('SELECT * FROM iot_devices WHERE id = ?').get(id);
   }
 
-  addDevice({ name, baseUrl, healthPingPath, healthPingIntervalMs, healthPingEnabled }) {
+  /**
+   * @param {{ startPinging?: boolean }} [options] startPinging: false — только записать в БД, пинги запустить позже
+   *   через startPingingDevice() (импорт делает так, чтобы откат транзакции не оставлял «призрачных» таймеров).
+   */
+  addDevice({ name, baseUrl, healthPingPath, healthPingIntervalMs, healthPingEnabled }, { startPinging = true } = {}) {
     const info = this.db
       .prepare(
         `INSERT INTO iot_devices (name, base_url, health_ping_path, health_ping_interval_ms, health_ping_enabled)
@@ -43,8 +47,13 @@ class IoTService extends EventEmitter {
       )
       .run(name, baseUrl, healthPingPath || '/ping', healthPingIntervalMs || 15000, healthPingEnabled ? 1 : 0);
     const device = this.getDevice(info.lastInsertRowid);
-    if (device.health_ping_enabled) this._startPinging(device);
+    if (startPinging && device.health_ping_enabled) this._startPinging(device);
     return device;
+  }
+
+  /** Запускает health-ping для уже сохранённого устройства (если он у него включён). */
+  startPingingDevice(device) {
+    if (device && device.health_ping_enabled) this._startPinging(device);
   }
 
   updateDevice(id, fields) {
