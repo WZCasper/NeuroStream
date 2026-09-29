@@ -1,0 +1,93 @@
+name: Применить исправления (разовый workflow)
+
+# Разовый workflow: применяет патч patches/neurostream-improvements.patch к ветке main,
+# коммитит результат и пушит. Запускается только вручную кнопкой ниже — при обычном
+# пуше в main НЕ срабатывает, чтобы не мешать основной сборке (build-windows.yml).
+#
+# После успешного запуска файлы .github/workflows/apply-improvements.yml и
+# patches/neurostream-improvements.patch можно удалить вручную, либо оставить —
+# повторный запуск безопасен (см. шаг проверки ниже).
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  apply-patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Скачать репозиторий
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Настроить автора коммита
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Проверить, что патч ещё не применён
+        id: check
+        run: |
+          if [ ! -f patches/neurostream-improvements.patch ]; then
+            echo "Файл patches/neurostream-improvements.patch не найден — нечего применять." >&2
+            echo "status=skip" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if git apply --check patches/neurostream-improvements.patch 2>/tmp/apply-check.log; then
+            echo "status=ok" >> "$GITHUB_OUTPUT"
+          else
+            echo "Патч не применяется чисто (скорее всего, уже был применён ранее, либо main успел измениться). Подробности:" >&2
+            cat /tmp/apply-check.log >&2
+            echo "status=conflict" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Применить патч
+        if: steps.check.outputs.status == 'ok'
+        run: git apply patches/neurostream-improvements.patch
+
+      - name: Установить зависимости и прогнать тесты
+        if: steps.check.outputs.status == 'ok'
+        run: |
+          npm ci
+          npm test
+
+      - name: Подготовить текст коммита
+        if: steps.check.outputs.status == 'ok'
+        run: |
+          cat > /tmp/commit-message.txt << 'COMMIT_MESSAGE_EOF'
+          Исправления TikTok, безопасности и надёжности
+
+          Применено автоматически workflow apply-improvements.yml:
+          - Разбор событий TikTok под реальный формат библиотеки v2 (текст чата, имена, аватары, счётчик зрителей)
+          - Автоозвучка чата, подарков и подписчиков по галочкам вкладки TTS and Chat
+          - Устранены дубли подключений TikTok и AxelChat при повторном нажатии Подключиться/Переподключить
+          - Защита локального сервера от постороннего сайта в браузере (заголовки Host и Origin)
+          - Устойчивость к некорректным сообщениям Socket.io (раньше роняли процесс)
+          - Атомарные импорт настроек и сохранение триггеров
+          - Очередь озвучки: ограничение размера и защита от зависания
+          - Блокировка повторного запуска второго экземпляра приложения
+          - package-lock.json синхронизирован с package.json (npm ci теперь проходит)
+          - 91 автотест: test/tiktok.test.js, autospeak.test.js, axelchat.test.js, security.test.js, main.test.js
+          COMMIT_MESSAGE_EOF
+
+      - name: Закоммитить и запушить
+        if: steps.check.outputs.status == 'ok'
+        run: |
+          git rm -q patches/neurostream-improvements.patch
+          git add -A
+          git commit -F /tmp/commit-message.txt
+          git push origin HEAD:main
+
+      - name: Итог
+        run: |
+          if [ "${{ steps.check.outputs.status }}" = "skip" ]; then
+            echo "::notice::Файл патча не найден — либо уже применён и удалён, либо не был загружен."
+          elif [ "${{ steps.check.outputs.status }}" = "conflict" ]; then
+            echo "::error::Патч не применился. См. шаг «Проверить, что патч ещё не применён» выше."
+            exit 1
+          else
+            echo "::notice::Патч применён и запушен в main. Обычная сборка build-windows.yml запустится следующим шагом сама."
+          fi
