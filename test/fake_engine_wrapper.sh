@@ -1,2 +1,2 @@
 #!/bin/sh
-exec python3 "$(dirname "$0")/fake_engine.py"
+exec node "$(dirname "$0")/fake_engine.js"

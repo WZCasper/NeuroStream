@@ -2,10 +2,19 @@
 
 /**
  * Сквозные тесты SileroTtsService — реальный дочерний процесс (фейковый
- * движок на Python, повторяющий протокол NDJSON настоящего silero_engine.py),
- * без мокания самого child_process. Это сознательный выбор: моки спрятали
- * бы именно те баги (гонки, утечки таймеров, зависшие процессы), ради
- * проверки которых этот модуль и писался.
+ * движок на Node.js в test/fake_engine.js, повторяющий протокол NDJSON
+ * настоящего python-tts/silero_engine.py), без мокания самого
+ * child_process. Это сознательный выбор: моки спрятали бы именно те баги
+ * (гонки, утечки таймеров, зависшие процессы), ради проверки которых этот
+ * модуль и писался.
+ *
+ * Фейковый движок написан на Node.js, а не на Python: SileroTtsService
+ * запускает exePath напрямую через spawn(exePath, []) без аргументов — в
+ * проде это standalone .exe, не требующий интерпретатора. Для теста нужен
+ * такой же "запускаемый напрямую" файл; test/fake_engine_wrapper.sh (Unix)
+ * и test/fake_engine_wrapper.cmd (Windows) делегируют на
+ * `node fake_engine.js`, и выбор между ними по process.platform ниже даёт
+ * тест, который одинаково проходит на всех платформах CI.
  *
  * Запуск: node test/sileroTts.test.js
  */
@@ -16,7 +25,10 @@ const os = require('os');
 const path = require('path');
 const { SileroTtsService } = require('../src/server/services/sileroTts');
 
-const WRAPPER = path.join(__dirname, 'fake_engine_wrapper.sh');
+const WRAPPER = path.join(
+  __dirname,
+  process.platform === 'win32' ? 'fake_engine_wrapper.cmd' : 'fake_engine_wrapper.sh'
+);
 
 let passed = 0;
 let failed = 0;
