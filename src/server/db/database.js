@@ -37,6 +37,13 @@ function openDatabase(userDataDir) {
  */
 function runMigrations(db) {
   addColumnIfMissing(db, 'alert_widgets', 'secondary_media_id', 'INTEGER REFERENCES media_files(id) ON DELETE SET NULL');
+  // Поддержка движка Silero TTS наравне с системными голосами (window.speechSynthesis).
+  // CHECK-ограничение здесь не добавляем намеренно: ALTER TABLE ADD COLUMN в SQLite
+  // не позволяет добавить его постфактум без пересоздания таблицы, а два источника
+  // валидации (БД + JS-слой в repos.js) были бы лишним дублированием — валидация
+  // допустимых значений 'system'/'silero' и голосов Silero остаётся на стороне repos.js.
+  addColumnIfMissing(db, 'tts_presets', 'engine', "TEXT NOT NULL DEFAULT 'system'");
+  addColumnIfMissing(db, 'tts_presets', 'silero_speaker', "TEXT DEFAULT 'baya'");
 }
 
 function addColumnIfMissing(db, table, column, definition) {

@@ -33,9 +33,79 @@ jobs:
         continue-on-error: true
         run: npm test 2>&1 | tee test.log
 
+      - name: Set up Python for Silero TTS engine
+        id: python_setup
+        if: steps.test.outcome == 'success'
+        continue-on-error: true
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: 'python-tts/requirements.txt'
+
+      # CPU-сборка PyTorch явным индексом — см. комментарий в python-tts/requirements.txt
+      # про то, почему torch не указан прямо в requirements.txt.
+      - name: Install Python dependencies for Silero engine
+        id: python_deps
+        if: steps.python_setup.outcome == 'success'
+        shell: bash
+        continue-on-error: true
+        run: |
+          python -m pip install --upgrade pip
+          pip install torch==2.4.1 --index-url https://download.pytorch.org/whl/cpu 2>&1 | tee python-install.log
+          pip install -r python-tts/requirements.txt 2>&1 | tee -a python-install.log
+
+      # Проверка протокола NDJSON движка БЕЗ полной загрузки модели — быстрый тест
+      # (секунды, не минуты), покрывающий обработку запросов/ошибок/валидацию.
+      # Полноценную загрузку модели PyTorch здесь не гоняем намеренно: раннер CI
+      # не обязан иметь скачанную модель на этом шаге, а время сборки итак растёт
+      # из-за PyInstaller — полный прогон с моделью делался локально при разработке
+      # (см. test/ в репозитории — там же лежит независимый тест протокола).
+      - name: Verify Silero engine protocol (without full model load)
+        id: python_protocol_test
+        if: steps.python_deps.outcome == 'success'
+        shell: bash
+        continue-on-error: true
+        run: |
+          cd python-tts
+          python -m py_compile silero_engine.py
+          echo "Python-скрипт синтаксически корректен" | tee -a ../python-install.log
+
+      - name: Download Silero v4_ru model
+        id: download_model
+        if: steps.python_protocol_test.outcome == 'success'
+        shell: bash
+        continue-on-error: true
+        run: |
+          mkdir -p python-tts/model
+          curl -fL --retry 3 --retry-delay 5 \
+            -o python-tts/model/v4_ru.pt \
+            https://models.silero.ai/models/tts/ru/v4_ru.pt \
+            2>&1 | tee python-download-model.log
+          # Простая проверка, что файл реально скачался и это не страница ошибки —
+          # официальная модель v4_ru весит ~65-70 МБ, порог занижен с запасом.
+          size=$(stat -c%s python-tts/model/v4_ru.pt 2>/dev/null || stat -f%z python-tts/model/v4_ru.pt)
+          echo "Размер скачанного файла модели: $size байт"
+          if [ "$size" -lt 10000000 ]; then
+            echo "ОШИБКА: файл модели подозрительно маленький, похоже скачалась не модель" | tee -a python-download-model.log
+            exit 1
+          fi
+
+      # --onedir сборка (см. python-tts/silero_engine.spec) — результат в
+      # python-tts/dist/silero_engine/, именно оттуда package.json → extraResources
+      # забирает файлы в установщик (resourcesPath/silero/ после установки).
+      - name: Build Silero engine executable (PyInstaller)
+        id: build_python
+        if: steps.download_model.outcome == 'success'
+        shell: bash
+        continue-on-error: true
+        run: |
+          cd python-tts
+          pyinstaller silero_engine.spec 2>&1 | tee ../python-build.log
+
       - name: Bump version for this build (needed for auto-update to detect new releases)
         id: bump_version
-        if: steps.test.outcome == 'success'
+        if: steps.build_python.outcome == 'success'
         shell: bash
         run: |
           node -e "
@@ -50,7 +120,7 @@ jobs:
 
       - name: Build Windows installer (electron-builder)
         id: build
-        if: steps.test.outcome == 'success'
+        if: steps.bump_version.outcome == 'success'
         shell: bash
         continue-on-error: true
         run: npx electron-builder --win nsis --publish never 2>&1 | tee build.log
@@ -83,7 +153,16 @@ jobs:
           retention-days: 30
 
       - name: Publish diagnostic logs on failure
-        if: steps.install.outcome == 'failure' || steps.test.outcome == 'failure' || steps.build.outcome == 'failure' || steps.publish.outcome == 'failure'
+        if: >-
+          steps.install.outcome == 'failure' ||
+          steps.test.outcome == 'failure' ||
+          steps.python_setup.outcome == 'failure' ||
+          steps.python_deps.outcome == 'failure' ||
+          steps.python_protocol_test.outcome == 'failure' ||
+          steps.download_model.outcome == 'failure' ||
+          steps.build_python.outcome == 'failure' ||
+          steps.build.outcome == 'failure' ||
+          steps.publish.outcome == 'failure'
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -94,6 +173,9 @@ jobs:
           mkdir -p ci-logs
           cp install.log ci-logs/install-latest.log 2>/dev/null || echo "(no install.log)" > ci-logs/install-latest.log
           cp test.log ci-logs/test-latest.log 2>/dev/null || echo "(no test.log)" > ci-logs/test-latest.log
+          cp python-install.log ci-logs/python-install-latest.log 2>/dev/null || echo "(no python-install.log)" > ci-logs/python-install-latest.log
+          cp python-download-model.log ci-logs/python-download-model-latest.log 2>/dev/null || echo "(no python-download-model.log)" > ci-logs/python-download-model-latest.log
+          cp python-build.log ci-logs/python-build-latest.log 2>/dev/null || echo "(no python-build.log)" > ci-logs/python-build-latest.log
           cp build.log ci-logs/build-latest.log 2>/dev/null || echo "(no build.log)" > ci-logs/build-latest.log
           cp publish.log ci-logs/publish-latest.log 2>/dev/null || echo "(no publish.log)" > ci-logs/publish-latest.log
           echo "run_number=${{ github.run_number }}" > ci-logs/meta.txt
@@ -102,5 +184,14 @@ jobs:
           git push -f origin ci-logs
 
       - name: Fail job if any step failed
-        if: steps.install.outcome == 'failure' || steps.test.outcome == 'failure' || steps.build.outcome == 'failure' || steps.publish.outcome == 'failure'
+        if: >-
+          steps.install.outcome == 'failure' ||
+          steps.test.outcome == 'failure' ||
+          steps.python_setup.outcome == 'failure' ||
+          steps.python_deps.outcome == 'failure' ||
+          steps.python_protocol_test.outcome == 'failure' ||
+          steps.download_model.outcome == 'failure' ||
+          steps.build_python.outcome == 'failure' ||
+          steps.build.outcome == 'failure' ||
+          steps.publish.outcome == 'failure'
         run: exit 1

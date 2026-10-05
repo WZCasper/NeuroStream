@@ -1,6 +1,7 @@
 'use strict';
 
 const { renderTemplate } = require('../lib/template');
+const { buildVoiceOptions } = require('../lib/voiceOptions');
 const { TTS_SOURCES } = require('./ttsQueue');
 
 // Значения по умолчанию совпадают со схемой БД: если пользователь очистил поле шаблона,
@@ -99,13 +100,7 @@ class AutoSpeakService {
       if (!speech) return;
       if (speech.length > MAX_SPEECH_CHARS) speech = `${speech.slice(0, MAX_SPEECH_CHARS).trimEnd()}…`;
 
-      this.ttsQueue.enqueue(event.source, speech, {
-        voiceURI: preset.voice_uri,
-        lang: preset.lang,
-        rate: preset.rate,
-        pitch: preset.pitch,
-        volume: preset.volume,
-      });
+      this.ttsQueue.enqueue(event.source, speech, buildVoiceOptions(preset));
     } catch (err) {
       this.logger.error('tts', `Ошибка автоозвучки: ${err.message}`);
     }

@@ -26,6 +26,7 @@ function createApiRouter(ctx) {
     tiktokConnector,
     axelChatConnector,
     triggerEngine,
+    sileroTts,
     io,
   } = ctx;
 
@@ -140,6 +141,13 @@ function createApiRouter(ctx) {
     const updated = repos.ttsPresets.update(source, req.body || {});
     if (!updated) return res.status(404).json({ error: 'Пресет не найден' });
     res.json(updated);
+  });
+
+  // Статус движка Silero TTS (готов/грузится/ошибка) и список доступных
+  // голосов — используется вкладкой «Озвучка и чат» для выпадающего списка
+  // и индикатора «Silero: готов / загружается / недоступен».
+  router.get('/tts/silero/status', (req, res) => {
+    res.json(sileroTts.getStatus());
   });
 
   // ============================== Фильтр ненормативной лексики ==============================

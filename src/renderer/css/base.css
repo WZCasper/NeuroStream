@@ -205,6 +205,9 @@ a:hover { text-decoration: underline; }
 .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
 .field label { font-size: 11.5px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.04em; }
 .field .hint { font-size: 11px; color: var(--text-muted); }
+.field .hint.success { color: var(--success); }
+.field .hint.warn { color: var(--warning); }
+.field .hint.error { color: var(--danger); }
 
 input[type="text"], input[type="number"], input[type="url"], input[type="password"], select, textarea {
   background: var(--bg-elevated);

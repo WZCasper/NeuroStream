@@ -2,6 +2,7 @@
 
 const { EventEmitter } = require('node:events');
 const { renderTemplate } = require('../lib/template');
+const { buildVoiceOptions } = require('../lib/voiceOptions');
 
 /**
  * TriggerEngine — слушает нормализованные события из eventBus, сопоставляет
@@ -223,13 +224,7 @@ class TriggerEngine extends EventEmitter {
         const template = action.config?.template || (event.type === 'gift' ? preset.gift_template : preset.chat_template);
         const rendered = renderTemplate(template, event);
         const filtered = this.profanityFilter.apply(rendered);
-        this.ttsQueue.enqueue(event.source, filtered, {
-          voiceURI: preset.voice_uri,
-          lang: preset.lang,
-          rate: preset.rate,
-          pitch: preset.pitch,
-          volume: preset.volume,
-        });
+        this.ttsQueue.enqueue(event.source, filtered, buildVoiceOptions(preset));
         break;
       }
 

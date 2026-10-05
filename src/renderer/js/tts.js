@@ -1,5 +1,7 @@
 import { api } from './api.js';
 import { toast } from './toast.js';
+import { socket } from './socket.js';
+import { sileroStatusLabel, updateEnginePanels } from './ttsEngineUi.js';
 
 function getVoicesAsync() {
   return new Promise((resolve) => {
@@ -9,7 +11,7 @@ function getVoicesAsync() {
       voices = window.speechSynthesis.getVoices();
       resolve(voices);
     };
-    // Некоторые системы не присылают voiceschanged вовсе — подстрахуемся таймаутом.
+    // Некоторые системы не присылают voiceschanged вовсе - подстрахуемся таймаутом.
     setTimeout(() => resolve(window.speechSynthesis.getVoices()), 1200);
   });
 }
@@ -26,7 +28,10 @@ function bindPresetPanel(source, voices) {
   const root = document.querySelector(`[data-preset-panel="${source}"]`);
   const els = {
     enabled: root.querySelector('[data-f="enabled"]'),
+    engine: root.querySelector('[data-f="engine"]'),
+    engineStatus: root.querySelector('[data-engine-status]'),
     voice: root.querySelector('[data-f="voice_uri"]'),
+    sileroSpeaker: root.querySelector('[data-f="silero_speaker"]'),
     rate: root.querySelector('[data-f="rate"]'),
     rateVal: root.querySelector('[data-f="rate_val"]'),
     pitch: root.querySelector('[data-f="pitch"]'),
@@ -44,12 +49,17 @@ function bindPresetPanel(source, voices) {
   };
 
   populateVoiceSelect(els.voice, voices, null);
+  updateEnginePanels(root, els.engine.value || 'system');
+
+  els.engine.addEventListener('change', () => updateEnginePanels(root, els.engine.value));
 
   root.querySelector('[data-action="save"]').addEventListener('click', async () => {
     const payload = {
       enabled: els.enabled.checked,
+      engine: els.engine.value,
       voice_uri: els.voice.value || null,
       voice_name: els.voice.selectedOptions[0]?.textContent || null,
+      silero_speaker: els.sileroSpeaker.value,
       rate: Number(els.rate.value),
       pitch: Number(els.pitch.value),
       volume: Number(els.volume.value),
@@ -71,6 +81,24 @@ function bindPresetPanel(source, voices) {
 
   root.querySelector('[data-action="test"]').addEventListener('click', () => {
     const text = els.testText.value.trim() || 'Проверка синтеза речи NeuroStream Studio';
+
+    if (els.engine.value === 'silero') {
+      // Синтез Silero происходит на сервере - проверяем тем же путём, которым
+      // реально пойдёт озвучка в бою (socket 'tts:testVoice' -> resolveSpeakCommand
+      // -> tts-host.js), а не отдельной упрощённой логикой в браузере.
+      socket.emit('tts:testVoice', {
+        source,
+        text,
+        voice: {
+          engine: 'silero',
+          sileroSpeaker: els.sileroSpeaker.value,
+          rate: Number(els.rate.value),
+          volume: Number(els.volume.value),
+        },
+      });
+      return;
+    }
+
     const utter = new SpeechSynthesisUtterance(text);
     const voice = voices.find((v) => v.voiceURI === els.voice.value);
     if (voice) utter.voice = voice;
@@ -92,9 +120,11 @@ function bindPresetPanel(source, voices) {
 }
 
 function fillPreset(bound, preset) {
-  const { els } = bound;
+  const { root, els } = bound;
   els.enabled.checked = !!preset.enabled;
+  els.engine.value = preset.engine || 'system';
   els.voice.value = preset.voice_uri || '';
+  els.sileroSpeaker.value = preset.silero_speaker || 'baya';
   els.rate.value = preset.rate;
   els.rateVal.textContent = Number(preset.rate).toFixed(2);
   els.pitch.value = preset.pitch;
@@ -108,6 +138,7 @@ function fillPreset(bound, preset) {
   els.minCoins.value = preset.min_gift_coins || 0;
   els.chatTemplate.value = preset.chat_template || '';
   els.giftTemplate.value = preset.gift_template || '';
+  updateEnginePanels(root, els.engine.value);
 }
 
 // ------------------------------ Фильтр ненормативной лексики ------------------------------
@@ -176,10 +207,35 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+function bindSileroStatusUpdates(panels) {
+  const applyStatus = (status) => {
+    const { text, className } = sileroStatusLabel(status);
+    panels.forEach(({ els }) => {
+      els.engineStatus.textContent = text;
+      els.engineStatus.className = `hint ${className}`;
+    });
+  };
+
+  socket.on('tts:sileroStatus', applyStatus);
+
+  // Статус мог прийти ДО того, как эта вкладка вообще была открыта (сервер
+  // рассылает его один раз при готовности движка) - подстраховываемся
+  // отдельным запросом через REST, чтобы не показывать пользователю
+  // "Silero ещё не запущен" бесконечно, если он просто не успел на старте.
+  api
+    .get('/api/tts/silero/status')
+    .then(applyStatus)
+    .catch(() => {
+      /* не критично - просто останется статус по умолчанию до следующего события сокета */
+    });
+}
+
 export async function initTts() {
   const voices = await getVoicesAsync();
   const tiktokPanel = bindPresetPanel('tiktok', voices);
   const axelchatPanel = bindPresetPanel('axelchat', voices);
+
+  bindSileroStatusUpdates([tiktokPanel, axelchatPanel]);
 
   try {
     const presets = await api.get('/api/tts/presets');

@@ -239,7 +239,26 @@
           <div class="card" data-preset-panel="tiktok">
             <h3 class="card-title">🔴 Голос для TikTok-чата</h3>
             <label class="checkbox-row"><input type="checkbox" data-f="enabled"> Озвучка включена</label>
-            <div class="field"><label>Голос</label><select data-f="voice_uri"></select></div>
+            <div class="field">
+              <label>Движок озвучки</label>
+              <select data-f="engine">
+                <option value="system">Системный голос Windows</option>
+                <option value="silero">Silero TTS (качественные русские голоса)</option>
+              </select>
+              <div class="hint" data-engine-status></div>
+            </div>
+            <div class="field" data-engine-panel="system"><label>Голос</label><select data-f="voice_uri"></select></div>
+            <div class="field" data-engine-panel="silero">
+              <label>Голос Silero</label>
+              <select data-f="silero_speaker">
+                <option value="aidar">Айдар (мужской)</option>
+                <option value="eugene">Евгений (мужской)</option>
+                <option value="baya">Бая (женский)</option>
+                <option value="kseniya">Ксения (женский)</option>
+                <option value="xenia">Ксения — альт. интонация (женский)</option>
+                <option value="random">Случайный голос при каждой фразе</option>
+              </select>
+            </div>
             <div class="field"><label>Скорость: <span data-f="rate_val">1.00</span></label><input type="range" min="0.5" max="2" step="0.05" data-f="rate"></div>
             <div class="field"><label>Высота тона: <span data-f="pitch_val">1.00</span></label><input type="range" min="0" max="2" step="0.05" data-f="pitch"></div>
             <div class="field"><label>Громкость: <span data-f="volume_val">1.00</span></label><input type="range" min="0" max="1" step="0.05" data-f="volume"></div>
@@ -262,7 +281,26 @@
           <div class="card" data-preset-panel="axelchat">
             <h3 class="card-title">💬 Голос для AxelChat</h3>
             <label class="checkbox-row"><input type="checkbox" data-f="enabled"> Озвучка включена</label>
-            <div class="field"><label>Голос</label><select data-f="voice_uri"></select></div>
+            <div class="field">
+              <label>Движок озвучки</label>
+              <select data-f="engine">
+                <option value="system">Системный голос Windows</option>
+                <option value="silero">Silero TTS (качественные русские голоса)</option>
+              </select>
+              <div class="hint" data-engine-status></div>
+            </div>
+            <div class="field" data-engine-panel="system"><label>Голос</label><select data-f="voice_uri"></select></div>
+            <div class="field" data-engine-panel="silero">
+              <label>Голос Silero</label>
+              <select data-f="silero_speaker">
+                <option value="aidar">Айдар (мужской)</option>
+                <option value="eugene">Евгений (мужской)</option>
+                <option value="baya">Бая (женский)</option>
+                <option value="kseniya">Ксения (женский)</option>
+                <option value="xenia">Ксения — альт. интонация (женский)</option>
+                <option value="random">Случайный голос при каждой фразе</option>
+              </select>
+            </div>
             <div class="field"><label>Скорость: <span data-f="rate_val">1.00</span></label><input type="range" min="0.5" max="2" step="0.05" data-f="rate"></div>
             <div class="field"><label>Высота тона: <span data-f="pitch_val">1.00</span></label><input type="range" min="0" max="2" step="0.05" data-f="pitch"></div>
             <div class="field"><label>Громкость: <span data-f="volume_val">1.00</span></label><input type="range" min="0" max="1" step="0.05" data-f="volume"></div>

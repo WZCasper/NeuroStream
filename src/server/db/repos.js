@@ -7,6 +7,11 @@
  *
  * @param {import('better-sqlite3').Database} db
  */
+// Голоса Silero TTS (модель v4_ru) — держим список в одном месте, чтобы
+// repos.js и валидация не разошлись со временем.
+const SILERO_SPEAKERS = ['aidar', 'baya', 'kseniya', 'xenia', 'eugene', 'random'];
+const TTS_ENGINES = ['system', 'silero'];
+
 function createRepos(db) {
   // ---------- TTS presets: один активный пресет на источник (tiktok / axelchat) ----------
   const ttsPresets = {
@@ -15,8 +20,8 @@ function createRepos(db) {
         const existing = db.prepare('SELECT id FROM tts_presets WHERE source = ?').get(source);
         if (!existing) {
           db.prepare(
-            `INSERT INTO tts_presets (source, enabled, lang, rate, pitch, volume, chat_template, gift_template)
-             VALUES (?, 1, 'ru-RU', 1.0, 1.0, 1.0, '{user} говорит: {text}', '{user} отправил подарок {gift} x{count}')`
+            `INSERT INTO tts_presets (source, enabled, engine, silero_speaker, lang, rate, pitch, volume, chat_template, gift_template)
+             VALUES (?, 1, 'system', 'baya', 'ru-RU', 1.0, 1.0, 1.0, '{user} говорит: {text}', '{user} отправил подарок {gift} x{count}')`
           ).run(source);
         }
       }
@@ -31,15 +36,24 @@ function createRepos(db) {
       const current = this.getForSource(source);
       if (!current) return null;
       const merged = { ...current, ...fields };
+
+      // Движок — только из разрешённого списка; некорректное значение из запроса
+      // (например, опечатка в самодельном API-вызове) тихо откатывается на 'system',
+      // а не падает 500-й ошибкой и не записывается в БД как есть.
+      const engine = TTS_ENGINES.includes(merged.engine) ? merged.engine : 'system';
+      const sileroSpeaker = SILERO_SPEAKERS.includes(merged.silero_speaker) ? merged.silero_speaker : 'baya';
+
       db.prepare(
-        `UPDATE tts_presets SET enabled=?, voice_uri=?, voice_name=?, lang=?, rate=?, pitch=?, volume=?,
+        `UPDATE tts_presets SET enabled=?, engine=?, voice_uri=?, voice_name=?, silero_speaker=?, lang=?, rate=?, pitch=?, volume=?,
            read_chat=?, read_gifts=?, read_follows=?, read_subscribes=?, min_gift_coins=?,
            chat_template=?, gift_template=?, updated_at=CURRENT_TIMESTAMP
          WHERE id=?`
       ).run(
         merged.enabled ? 1 : 0,
+        engine,
         merged.voice_uri ?? null,
         merged.voice_name ?? null,
+        sileroSpeaker,
         merged.lang ?? 'ru-RU',
         Number(merged.rate) || 1,
         Number(merged.pitch) || 1,
@@ -195,4 +209,4 @@ function createRepos(db) {
   return { ttsPresets, profanityRules, triggers, alertWidgets };
 }
 
-module.exports = { createRepos };
+module.exports = { createRepos, SILERO_SPEAKERS, TTS_ENGINES };

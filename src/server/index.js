@@ -14,6 +14,7 @@ const { TikTokConnectorService } = require('./services/tiktokConnector');
 const { AxelChatConnectorService } = require('./services/axelChatConnector');
 const { ProfanityFilterService } = require('./services/profanityFilter');
 const { TTSQueueManager } = require('./services/ttsQueue');
+const { SileroTtsService, VALID_SPEAKERS: SILERO_VALID_SPEAKERS } = require('./services/sileroTts');
 const { IoTService } = require('./services/iotService');
 const { MediaLibraryService } = require('./services/mediaLibrary');
 const { TriggerEngine } = require('./services/triggerEngine');
@@ -24,6 +25,41 @@ const { createLocalGuard } = require('./lib/localGuard');
 const { createApiErrorHandler } = require('./lib/httpErrors');
 
 const DEFAULT_PORT = 47823;
+
+/**
+ * Определяет путь к ресурсам движка Silero TTS (exe-помощник + файл модели),
+ * упакованным в установщик через electron-builder → extraResources (см.
+ * package.json). В собранном приложении они лежат рядом с остальными
+ * extraResources (process.resourcesPath), в режиме разработки — прямо в
+ * репозитории (python-tts/dist/...).
+ *
+ * process.resourcesPath существует ТОЛЬКО когда процесс запущен внутри
+ * Electron. Если сервер запущен отдельно (npm run server:only — такой
+ * сценарий в проекте есть и используется, например, для автотестов),
+ * process.resourcesPath undefined — тогда всегда используется путь
+ * разработки, даже если NODE_ENV не выставлен в 'development' явно.
+ */
+function resolveSileroPaths() {
+  const isPackaged = typeof process.resourcesPath === 'string' && process.resourcesPath.length > 0;
+
+  // В собранном приложении exe-помощник и модель лежат рядом друг с другом
+  // внутри resourcesPath/silero (см. package.json → build.extraResources).
+  // В режиме разработки exe берётся из результата локальной сборки
+  // PyInstaller (python-tts/dist/silero_engine/), а модель — прямо из
+  // репозитория (python-tts/model/), т.к. модель в репозиторий коммитится
+  // отдельно от PyInstaller-сборки и не обязана лежать внутри dist/.
+  const exeBase = isPackaged
+    ? path.join(process.resourcesPath, 'silero')
+    : path.join(__dirname, '..', '..', 'python-tts', 'dist', 'silero_engine');
+  const modelBase = isPackaged
+    ? path.join(process.resourcesPath, 'silero', 'model')
+    : path.join(__dirname, '..', '..', 'python-tts', 'model');
+
+  return {
+    exePath: path.join(exeBase, process.platform === 'win32' ? 'silero_engine.exe' : 'silero_engine'),
+    modelPath: path.join(modelBase, 'v4_ru.pt'),
+  };
+}
 
 // Настройки, которые всегда должны храниться на диске в зашифрованном виде (это фактически
 // пароли/токены доступа к аккаунту TikTok) — см. src/server/lib/secureStore.js.
@@ -58,6 +94,37 @@ async function createServer({ userDataDir, electronApp = null, safeStorage = nul
   const mediaLibrary = new MediaLibraryService(db, mediaDir);
   const profanityFilter = new ProfanityFilterService(db);
   const ttsQueue = new TTSQueueManager();
+
+  const sileroPaths = resolveSileroPaths();
+  const sileroTts = new SileroTtsService({
+    exePath: sileroPaths.exePath,
+    modelPath: sileroPaths.modelPath,
+    outputDir: path.join(userDataDir, 'tts-cache'),
+    log: (level, message) => {
+      // debug-уровень из Python-процесса (сырые stderr-строки) не льём в журнал
+      // приложения, который видит пользователь — он на русском и про бизнес-события,
+      // а не про внутреннюю диагностику Python. Для диагностики разработчика это
+      // всё равно попадает в консоль через console.error ниже.
+      if (level === 'debug') return;
+      const logFn = level === 'error' ? logger.error : logger.warn;
+      logFn.call(logger, 'tts', message);
+    },
+  });
+  // Запуск — в фоне, не блокируя старт остального сервера: загрузка модели
+  // PyTorch может занять до минуты, а TikTok-подключение, UI и всё остальное
+  // не должны ждать её готовности. Если движок не поднимется (например, у
+  // пользователя повреждён установщик или антивирус заблокировал exe) —
+  // пользователь просто не увидит голоса Silero в выпадающем списке и
+  // получит понятную ошибку при попытке их выбрать, остальная программа
+  // продолжит работать как обычно.
+  sileroTts.start().then(
+    () => io.emit('tts:sileroStatus', sileroTts.getStatus()),
+    (err) => {
+      logger.warn('tts', `Озвучка Silero TTS недоступна: ${err.message}`);
+      io.emit('tts:sileroStatus', sileroTts.getStatus());
+    }
+  );
+
   const iotService = new IoTService(db, logger);
   const tiktokConnector = new TikTokConnectorService(eventBus, logger);
   const axelChatConnector = new AxelChatConnectorService(eventBus, logger);
@@ -96,6 +163,13 @@ async function createServer({ userDataDir, electronApp = null, safeStorage = nul
   const staticRendererDir = path.join(__dirname, '..', 'renderer');
   app.use(express.static(staticRendererDir));
   app.use('/media', express.static(mediaDir));
+  // Синтезированные Silero-фразы — та же папка, что передана в SileroTtsService
+  // как outputDir. Раздаётся тем же localGuard-защищённым сервером (CSP у
+  // tts-host.html разрешает connect-src/script-src только 'self' и
+  // 127.0.0.1 — свой же порт, без стороннего хоста), поэтому проигрывание
+  // через <audio src="/tts-cache/...wav"> укладывается в существующую CSP
+  // без изменений.
+  app.use('/tts-cache', express.static(path.join(userDataDir, 'tts-cache')));
 
   const httpServer = http.createServer(app);
   const io = new SocketIOServer(httpServer, {
@@ -119,6 +193,7 @@ async function createServer({ userDataDir, electronApp = null, safeStorage = nul
       tiktokConnector,
       axelChatConnector,
       triggerEngine,
+      sileroTts,
       io,
     })
   );
@@ -147,6 +222,7 @@ async function createServer({ userDataDir, electronApp = null, safeStorage = nul
     // При подключении сразу отправляем текущее состояние, чтобы UI не ждал следующего события.
     socket.emit('tiktok:status', tiktokConnector.getState());
     socket.emit('axelchat:status', axelChatConnector.getState());
+    socket.emit('tts:sileroStatus', sileroTts.getStatus());
     if (axelChatConnector.lastStates) socket.emit('axelchat:states', axelChatConnector.lastStates);
     socket.emit('log:recent', logger.recent(200));
     socket.emit('iot:devices', iotService.listDevices());
@@ -166,13 +242,22 @@ async function createServer({ userDataDir, electronApp = null, safeStorage = nul
       if (overlaySocketIds.delete(socket.id)) broadcastOverlayCount();
     });
 
-    safeOn(socket, 'tts:utteranceEnd', ({ source, queueId }) => {
+    safeOn(socket, 'tts:utteranceEnd', ({ source, queueId, audioPath }) => {
       ttsQueue.markDone(source, queueId);
+      // Файл .wav, синтезированный Silero для этой фразы, больше не нужен —
+      // tts-host.js прислал его путь обратно вместе с подтверждением конца
+      // воспроизведения (см. правки tts-host.js). Для системных голосов
+      // audioPath просто отсутствует, и удалять нечего.
+      if (audioPath) sileroTts.deleteAudioFile(audioPath);
     });
 
-    safeOn(socket, 'tts:testVoice', ({ source, text, voice }) => {
+    safeOn(socket, 'tts:testVoice', async ({ source, text, voice }) => {
       // Позволяет вкладке TTS & Chat проверить голос, минуя очередь конкретного источника.
-      socket.emit('tts:speak', { source: `test-${source}`, queueId: 'test', text, voice });
+      // Используем тот же resolveSpeakCommand(), что и обычная очередь, — чтобы «Тест»
+      // реально проверял то же самое, что прозвучит в бою (включая синтез через Silero,
+      // если выбран этот движок), а не отдельную упрощённую логику.
+      const resolved = await resolveSpeakCommand({ source: `test-${source}`, queueId: 'test', text, voice });
+      socket.emit('tts:speak', resolved);
     });
   });
 
@@ -191,7 +276,6 @@ async function createServer({ userDataDir, electronApp = null, safeStorage = nul
     if (action.type === 'sound') io.emit('overlay:sound', action);
   });
 
-  ttsQueue.on('speak', (cmd) => io.emit('tts:speak', cmd));
   // Записи в журнал о проблемах очереди — не чаще раза в 10 секунд, чтобы при потоке
   // сообщений сам журнал не превратился в спам.
   let lastTtsWarnAt = 0;
@@ -206,6 +290,52 @@ async function createServer({ userDataDir, electronApp = null, safeStorage = nul
   ttsQueue.on('timeout', ({ source }) =>
     warnTtsThrottled(`Озвучка «${source}»: окно озвучки не сообщило об окончании фразы — очередь продолжена`)
   );
+
+  /**
+   * Готовит команду 'tts:speak' к отправке в tts-host.js. Для voice.engine
+   * === 'silero' синтезирует фразу через SileroTtsService и подставляет
+   * audioUrl вместо текста для браузерного speechSynthesis; для всех
+   * остальных случаев (включая отсутствие поля engine — пресеты по
+   * умолчанию и старые сохранённые записи) возвращает команду как есть —
+   * tts-host.js продолжает использовать Web Speech API, ничего не меняется
+   * в уже рабочем пути для системных голосов.
+   *
+   * Если Silero выбран, но синтез не удался (движок ещё грузится, упал,
+   * битый текст и т.п.) — ПАДАТЬ ОЧЕРЕДЬ ОЗВУЧКИ НЕЛЬЗЯ: откатываемся на
+   * системный голос той же команды и помечаем явным предупреждением в
+   * журнале, чтобы пользователь понимал, почему звучит «не тот» голос, а
+   * не терял фразу молча.
+   */
+  async function resolveSpeakCommand(cmd) {
+    const voice = cmd.voice || {};
+    if (voice.engine !== 'silero') return cmd;
+
+    try {
+      const { path: audioPath } = await sileroTts.synthesize(cmd.text, voice.sileroSpeaker);
+      // tts-host.js обращается к серверу по тому же origin (127.0.0.1:порт), поэтому
+      // относительного пути достаточно — и он не зависит от конкретного занятого порта.
+      const fileName = path.basename(audioPath);
+      return {
+        ...cmd,
+        voice: { ...voice, audioUrl: `/tts-cache/${encodeURIComponent(fileName)}`, audioPath },
+      };
+    } catch (err) {
+      warnTtsThrottled(`Озвучка Silero недоступна (${err.message}) — временно используется системный голос`);
+      return { ...cmd, voice: { ...voice, engine: 'system' } };
+    }
+  }
+
+  ttsQueue.on('speak', (cmd) => {
+    resolveSpeakCommand(cmd)
+      .then((resolved) => io.emit('tts:speak', resolved))
+      .catch((err) => {
+        // resolveSpeakCommand сама ловит ошибки синтеза и откатывается на system — сюда
+        // попадание означает что-то совсем неожиданное (например, ошибка в самой функции).
+        // Фраза всё равно не должна зависнуть в очереди молча — отправляем как есть.
+        logger.error('tts', `Непредвиденная ошибка подготовки озвучки: ${err.message}`);
+        io.emit('tts:speak', cmd);
+      });
+  });
 
   resourceMonitor.on('sample', (sample) => io.emit('resource:sample', sample));
   resourceMonitor.start();
@@ -257,6 +387,7 @@ async function createServer({ userDataDir, electronApp = null, safeStorage = nul
       mediaLibrary,
       profanityFilter,
       ttsQueue,
+      sileroTts,
       iotService,
       tiktokConnector,
       axelChatConnector,
@@ -272,6 +403,7 @@ async function createServer({ userDataDir, electronApp = null, safeStorage = nul
       triggerEngine.destroy();
       autoSpeak.destroy();
       ttsQueue.destroy();
+      await sileroTts.shutdown();
       // io.close() отключает все Socket.io-соединения (окна Electron держат их постоянно
       // открытыми) и только после этого закрывает сам httpServer — обычный httpServer.close()
       // без этого зависает навсегда, ожидая закрытия соединений, которые сами никогда не закроются.

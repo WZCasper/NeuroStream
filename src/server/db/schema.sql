@@ -17,8 +17,10 @@ CREATE TABLE IF NOT EXISTS tts_presets (
   id               INTEGER PRIMARY KEY AUTOINCREMENT,
   source           TEXT NOT NULL CHECK (source IN ('tiktok', 'axelchat')),
   enabled          INTEGER NOT NULL DEFAULT 1,
-  voice_uri        TEXT,               -- URI голоса из window.speechSynthesis.getVoices()
-  voice_name       TEXT,               -- отображаемое имя голоса
+  engine           TEXT NOT NULL DEFAULT 'system' CHECK (engine IN ('system', 'silero')),
+  voice_uri        TEXT,               -- URI голоса из window.speechSynthesis.getVoices() (engine='system')
+  voice_name       TEXT,               -- отображаемое имя голоса (engine='system')
+  silero_speaker   TEXT DEFAULT 'baya' CHECK (silero_speaker IN ('aidar', 'baya', 'kseniya', 'xenia', 'eugene', 'random')),
   lang             TEXT DEFAULT 'ru-RU',
   rate             REAL NOT NULL DEFAULT 1.0,  -- скорость 0.5 - 2.0
   pitch            REAL NOT NULL DEFAULT 1.0,  -- высота тона 0 - 2.0

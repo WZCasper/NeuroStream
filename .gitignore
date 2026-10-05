@@ -6,6 +6,12 @@ release/
 dist/
 *.tsbuildinfo
 
+# Движок Silero TTS: скачивается/собирается в CI (см. build-windows.yml),
+# НЕ хранится в git — файл модели ~65 МБ, а PyInstaller-сборка ещё тяжелее.
+python-tts/model/
+python-tts/build/
+python-tts/dist/
+
 # Локальные данные пользователя (создаются при первом запуске приложения)
 *.db
 *.db-journal

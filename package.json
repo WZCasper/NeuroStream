@@ -15,7 +15,7 @@
     "postinstall": "electron-builder install-app-deps",
     "pack": "electron-builder --dir",
     "dist": "electron-builder --win nsis --publish=never",
-    "test": "node test/smoke.test.js && node test/tiktok.test.js && node test/autospeak.test.js && node test/axelchat.test.js && node test/security.test.js && node test/main.test.js"
+    "test": "node test/smoke.test.js && node test/tiktok.test.js && node test/autospeak.test.js && node test/axelchat.test.js && node test/security.test.js && node test/main.test.js && node test/sileroTts.test.js && node test/sileroMigration.test.js && node test/voiceOptions.test.js && node test/ttsEngineUi.test.js"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",
@@ -31,6 +31,7 @@
     "cross-env": "^7.0.3",
     "electron": "^44.3.0",
     "electron-builder": "^26.15.3",
+    "jsdom": "^30.1.2",
     "socket.io-client": "^4.8.3"
   },
   "build": {
@@ -50,6 +51,16 @@
       {
         "from": "src/server/db/schema.sql",
         "to": "schema.sql"
+      },
+      {
+        "from": "python-tts/dist/silero_engine",
+        "to": "silero",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "python-tts/model",
+        "to": "silero/model",
+        "filter": ["**/*"]
       }
     ],
     "asarUnpack": [
@@ -79,5 +90,6 @@
       "createStartMenuShortcut": true,
       "shortcutName": "NeuroStream Studio"
     }
-  }
+  },
+  "keywords": []
 }
