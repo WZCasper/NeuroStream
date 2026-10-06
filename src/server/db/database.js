@@ -99,4 +99,4 @@ function createSettingsRepo(db) {
   };
 }
 
-module.exports = { openDatabase, createSettingsRepo };
+module.exports = { openDatabase, createSettingsRepo, runMigrations };
