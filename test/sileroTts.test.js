@@ -1,20 +1,24 @@
 'use strict';
 
 /**
- * Сквозные тесты SileroTtsService — реальный дочерний процесс (фейковый
+ * Сквозные тесты SileroTtsService - реальный дочерний процесс (фейковый
  * движок на Node.js в test/fake_engine.js, повторяющий протокол NDJSON
  * настоящего python-tts/silero_engine.py), без мокания самого
  * child_process. Это сознательный выбор: моки спрятали бы именно те баги
  * (гонки, утечки таймеров, зависшие процессы), ради проверки которых этот
  * модуль и писался.
  *
- * Фейковый движок написан на Node.js, а не на Python: SileroTtsService
- * запускает exePath напрямую через spawn(exePath, []) без аргументов — в
- * проде это standalone .exe, не требующий интерпретатора. Для теста нужен
- * такой же "запускаемый напрямую" файл; test/fake_engine_wrapper.sh (Unix)
- * и test/fake_engine_wrapper.cmd (Windows) делегируют на
- * `node fake_engine.js`, и выбор между ними по process.platform ниже даёт
- * тест, который одинаково проходит на всех платформах CI.
+ * Запускаем фейковый движок как `process.execPath test/fake_engine.js`
+ * (через опциональный SileroTtsService.exeArgs) вместо платформенно-
+ * зависимой .sh/.cmd обёртки. Это сознательный отказ от промежуточных
+ * обёрточных скриптов: более ранняя версия этого теста использовала
+ * .sh-скрипт, вызывающий python3 (зависало на windows-2022, т.к. Windows
+ * не исполняет .sh через spawn() как POSIX-системы), затем - .cmd-скрипт,
+ * вызывающий node (с 2024 года, CVE-2024-27980, Windows требует явного
+ * shell:true для spawn() .cmd-файлов, и это тоже оказалось ненадёжно
+ * внутри CI). process.execPath - это сам исполняемый файл node.exe/node,
+ * обычный бинарник без какого-либо платформенно-специфичного поведения
+ * spawn() - поэтому именно он, а не обёртка, передаётся в exePath.
  *
  * Запуск: node test/sileroTts.test.js
  */
@@ -25,10 +29,20 @@ const os = require('os');
 const path = require('path');
 const { SileroTtsService } = require('../src/server/services/sileroTts');
 
-const WRAPPER = path.join(
-  __dirname,
-  process.platform === 'win32' ? 'fake_engine_wrapper.cmd' : 'fake_engine_wrapper.sh'
-);
+const FAKE_ENGINE_SCRIPT = path.join(__dirname, 'fake_engine.js');
+
+/** Фабрика сервиса с уже подставленными exePath/exeArgs для фейкового движка -
+ * чтобы не дублировать process.execPath/[FAKE_ENGINE_SCRIPT] в каждом тесте. */
+function makeService(opts = {}) {
+  return new SileroTtsService({
+    exePath: process.execPath,
+    exeArgs: [FAKE_ENGINE_SCRIPT],
+    modelPath: '/fake/model.pt',
+    outputDir: '/tmp/fake-out',
+    log: () => {},
+    ...opts,
+  });
+}
 
 let passed = 0;
 let failed = 0;
@@ -46,15 +60,10 @@ async function test(name, fn) {
 }
 
 async function main() {
-  console.log('SileroTtsService — сквозные тесты\n');
+  console.log('SileroTtsService - сквозные тесты\n');
 
   await test('запуск процесса и переход в статус ready', async () => {
-    const svc = new SileroTtsService({
-      exePath: WRAPPER,
-      modelPath: '/fake/model.pt',
-      outputDir: '/tmp/fake-out',
-      log: () => {},
-    });
+    const svc = makeService();
     await svc.start();
     assert.strictEqual(svc.getStatus().status, 'ready');
     assert.deepStrictEqual(
@@ -66,20 +75,16 @@ async function main() {
   });
 
   await test('повторный start() во время готовности не плодит процессы', async () => {
-    const svc = new SileroTtsService({
-      exePath: WRAPPER, modelPath: '/fake/model.pt', outputDir: '/tmp/fake-out', log: () => {},
-    });
+    const svc = makeService();
     await svc.start();
     const pidBefore = svc.process.pid;
-    await svc.start(); // повторный вызов — не должен создать новый процесс
+    await svc.start(); // повторный вызов - не должен создать новый процесс
     assert.strictEqual(svc.process.pid, pidBefore, 'PID процесса не должен измениться');
     await svc.shutdown();
   });
 
   await test('успешный синтез возвращает path и durationMs', async () => {
-    const svc = new SileroTtsService({
-      exePath: WRAPPER, modelPath: '/fake/model.pt', outputDir: '/tmp/fake-out', log: () => {},
-    });
+    const svc = makeService();
     await svc.start();
     const result = await svc.synthesize('Привет, мир', 'baya');
     assert.ok(result.path.endsWith('.wav'));
@@ -88,9 +93,7 @@ async function main() {
   });
 
   await test('параллельные запросы корректно сопоставляются по id (нет гонки)', async () => {
-    const svc = new SileroTtsService({
-      exePath: WRAPPER, modelPath: '/fake/model.pt', outputDir: '/tmp/fake-out', log: () => {},
-    });
+    const svc = makeService();
     await svc.start();
     const results = await Promise.all([
       svc.synthesize('Фраза один', 'aidar'),
@@ -105,9 +108,7 @@ async function main() {
   });
 
   await test('ошибка синтеза одной фразы не ломает последующие запросы', async () => {
-    const svc = new SileroTtsService({
-      exePath: WRAPPER, modelPath: '/fake/model.pt', outputDir: '/tmp/fake-out', log: () => {},
-    });
+    const svc = makeService();
     await svc.start();
 
     await assert.rejects(
@@ -123,9 +124,7 @@ async function main() {
   });
 
   await test('synthesize() до start() отклоняется понятной ошибкой, не висит', async () => {
-    const svc = new SileroTtsService({
-      exePath: WRAPPER, modelPath: '/fake/model.pt', outputDir: '/tmp/fake-out', log: () => {},
-    });
+    const svc = makeService();
     await assert.rejects(
       () => svc.synthesize('Текст', 'baya'),
       /недоступен/
@@ -133,41 +132,31 @@ async function main() {
   });
 
   await test('shutdown() без запущенного процесса не падает', async () => {
-    const svc = new SileroTtsService({
-      exePath: WRAPPER, modelPath: '/fake/model.pt', outputDir: '/tmp/fake-out', log: () => {},
-    });
-    await svc.shutdown(); // не было start() — должен просто резолвиться
+    const svc = makeService();
+    await svc.shutdown(); // не было start() - должен просто резолвиться
     assert.strictEqual(svc.getStatus().status, 'stopped');
   });
 
   await test('shutdown() действительно завершает процесс (нет утечки, как в прошлом баге)', async () => {
-    const svc = new SileroTtsService({
-      exePath: WRAPPER, modelPath: '/fake/model.pt', outputDir: '/tmp/fake-out', log: () => {},
-    });
+    const svc = makeService();
     await svc.start();
     const pid = svc.process.pid;
     await svc.shutdown();
 
-    // Проверяем, что процесс с этим PID действительно не существует —
+    // Проверяем, что процесс с этим PID действительно не существует -
     // сигнал 0 не убивает процесс, только проверяет его существование.
     let stillAlive = true;
     try {
       process.kill(pid, 0);
     } catch (err) {
-      stillAlive = false; // ESRCH — процесса нет, это и есть желаемый результат
+      stillAlive = false; // ESRCH - процесса нет, это и есть желаемый результат
     }
     assert.strictEqual(stillAlive, false, 'Процесс должен быть завершён после shutdown()');
   });
 
   await test('крах процесса после ready отклоняет ожидающие запросы, не висит вечно', async () => {
-    const svc = new SileroTtsService({
-      exePath: WRAPPER, modelPath: '/fake/model.pt', outputDir: '/tmp/fake-out', log: () => {},
-    });
-    // Отдельный процесс с другим режимом — запускаем вручную через ENV.
-    const origSpawnEnv = process.env.FAKE_ENGINE_MODE;
-    process.env.FAKE_ENGINE_MODE = 'normal';
+    const svc = makeService();
     await svc.start();
-    process.env.FAKE_ENGINE_MODE = origSpawnEnv;
 
     // Убиваем процесс напрямую, как будто он неожиданно упал в бою.
     svc.process.kill('SIGKILL');
@@ -181,15 +170,13 @@ async function main() {
 
   await test('deleteAudioFile() удаляет реальный файл с диска', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nss-silero-test-'));
-    const svc = new SileroTtsService({
-      exePath: WRAPPER, modelPath: '/fake/model.pt', outputDir: dir, log: () => {},
-    });
+    const svc = makeService({ outputDir: dir });
     const filePath = path.join(dir, 'test-audio.wav');
     fs.writeFileSync(filePath, 'fake wav content');
     assert.ok(fs.existsSync(filePath));
 
     svc.deleteAudioFile(filePath);
-    // unlink асинхронный — даём event loop такт на завершение.
+    // unlink асинхронный - даём event loop такт на завершение.
     await new Promise((resolve) => setTimeout(resolve, 100));
 
     assert.strictEqual(fs.existsSync(filePath), false);
@@ -197,10 +184,8 @@ async function main() {
   });
 
   await test('deleteAudioFile() на несуществующем файле не падает и не бросает', async () => {
-    const svc = new SileroTtsService({
-      exePath: WRAPPER, modelPath: '/fake/model.pt', outputDir: '/tmp/fake-out', log: () => {},
-    });
-    // Не должно бросить исключение — тест провалится сам, если бросит.
+    const svc = makeService();
+    // Не должно бросить исключение - тест провалится сам, если бросит.
     svc.deleteAudioFile('/tmp/nss-test-does-not-exist-12345.wav');
     await new Promise((resolve) => setTimeout(resolve, 100));
   });
@@ -209,11 +194,9 @@ async function main() {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nss-silero-test-'));
     fs.writeFileSync(path.join(dir, 'old1.wav'), 'leftover');
     fs.writeFileSync(path.join(dir, 'old2.wav'), 'leftover');
-    fs.writeFileSync(path.join(dir, 'not-audio.txt'), 'should stay'); // не .wav — не должен удаляться
+    fs.writeFileSync(path.join(dir, 'not-audio.txt'), 'should stay'); // не .wav - не должен удаляться
 
-    const svc = new SileroTtsService({
-      exePath: WRAPPER, modelPath: '/fake/model.pt', outputDir: dir, log: () => {},
-    });
+    const svc = makeService({ outputDir: dir });
     svc.cleanupStaleFiles();
     await new Promise((resolve) => setTimeout(resolve, 100));
 
@@ -228,9 +211,7 @@ async function main() {
     const parentDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nss-silero-test-'));
     const outputDir = path.join(parentDir, 'tts-cache'); // намеренно НЕ создаём заранее
 
-    const svc = new SileroTtsService({
-      exePath: WRAPPER, modelPath: '/fake/model.pt', outputDir, log: () => {},
-    });
+    const svc = makeService({ outputDir });
     assert.strictEqual(fs.existsSync(outputDir), false, 'папка не должна существовать до start()');
 
     await svc.start();

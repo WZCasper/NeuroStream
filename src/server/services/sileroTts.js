@@ -59,6 +59,11 @@ class SileroTtsService {
     }
 
     this.exePath = opts.exePath;
+    // exeArgs — опциональные аргументы командной строки для exePath. В проде
+    // всегда [] (exePath — готовый standalone .exe, не требует аргументов);
+    // используется автотестами, которым нужно запустить `node <путь-к-скрипту>`
+    // вместо платформенно-зависимой .sh/.cmd обёртки — см. test/sileroTts.test.js.
+    this.exeArgs = Array.isArray(opts.exeArgs) ? opts.exeArgs : [];
     this.modelPath = opts.modelPath;
     this.outputDir = opts.outputDir;
     this.log = typeof opts.log === 'function' ? opts.log : () => {};
@@ -126,7 +131,7 @@ class SileroTtsService {
 
       let child;
       try {
-        child = spawn(this.exePath, [], {
+        child = spawn(this.exePath, this.exeArgs, {
           env: {
             ...process.env,
             NSS_SILERO_MODEL_PATH: this.modelPath,
