@@ -105,7 +105,19 @@ async function unitTests() {
     const { eventBus, spoken } = make();
     eventBus.publish(chat('Привет'));
     assert.equal(spoken.length, 1);
-    assert.deepEqual(spoken[0].voice, { voiceURI: 'v1', lang: 'ru-RU', rate: 1, pitch: 1, volume: 1 });
+    // voice теперь всегда включает engine/sileroSpeaker (см. buildVoiceOptions
+    // в src/server/lib/voiceOptions.js, добавлено для поддержки Silero TTS) —
+    // preset() в этом файле не задаёт engine/silero_speaker, поэтому ожидаем
+    // дефолты ('system'/'baya'), которые buildVoiceOptions подставляет сама.
+    assert.deepEqual(spoken[0].voice, {
+      engine: 'system',
+      voiceURI: 'v1',
+      sileroSpeaker: 'baya',
+      lang: 'ru-RU',
+      rate: 1,
+      pitch: 1,
+      volume: 1,
+    });
   });
   await step('фильтр мата применяется', () => {
     const { eventBus, spoken } = make();

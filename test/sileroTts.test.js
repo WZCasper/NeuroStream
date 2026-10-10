@@ -154,6 +154,43 @@ async function main() {
     assert.strictEqual(stillAlive, false, 'Процесс должен быть завершён после shutdown()');
   });
 
+  await test('start() с несуществующим exePath (ENOENT) переходит в status=error, не висит', async () => {
+    const svc = makeService({ exePath: '/несуществующий/путь/к/silero_engine.exe', exeArgs: [] });
+
+    await assert.rejects(() => svc.start(), /Процесс Silero TTS завершился с ошибкой|ENOENT/);
+    assert.strictEqual(svc.getStatus().status, 'error');
+  });
+
+  await test(
+    'shutdown() после неудачного ENOENT-старта завершается быстро, не висит ' +
+    '(регрессионный тест: именно эта комбинация зависала весь npm test на CI)',
+    async () => {
+      const svc = makeService({ exePath: '/несуществующий/путь/к/silero_engine.exe', exeArgs: [] });
+
+      await assert.rejects(() => svc.start()); // ENOENT - start() должен отклониться
+
+      // Если регрессия вернётся, shutdown() зависнет на неопределённое время -
+      // оборачиваем в жёсткий таймаут теста, а не полагаемся только на
+      // собственный внутренний таймаут SileroTtsService (SHUTDOWN_GRACE_MS*2),
+      // чтобы при регрессии тест падал с понятной ошибкой за секунды, а не
+      // вешал весь npm test на CI на неопределённое время, как уже было.
+      const HARD_TEST_TIMEOUT_MS = 10_000;
+      await Promise.race([
+        svc.shutdown(),
+        new Promise((_, reject) =>
+          setTimeout(
+            () => reject(new Error(
+              `РЕГРЕССИЯ: shutdown() после ENOENT-старта не завершился за ${HARD_TEST_TIMEOUT_MS / 1000} с`
+            )),
+            HARD_TEST_TIMEOUT_MS
+          )
+        ),
+      ]);
+
+      assert.strictEqual(svc.getStatus().status, 'stopped');
+    }
+  );
+
   await test('крах процесса после ready отклоняет ожидающие запросы, не висит вечно', async () => {
     const svc = makeService();
     await svc.start();
